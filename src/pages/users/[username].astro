@@ -1,0 +1,21 @@
+---
+// In static output mode, Astro dev server serves ALL matching dynamic routes
+// regardless of getStaticPaths. For production build, Firebase Hosting's
+// catch-all rewrite (** → /index.html) handles /users/* paths.
+// We export paths for any username that might be visited in local testing.
+export function getStaticPaths() {
+  // Return a broad wildcard list. The React shell reads actual username from window.location.
+  return [
+    { params: { username: "_shell" } },
+  ];
+}
+
+// Silence Astro's strict path validation in dev by also exporting prerender flag
+// export const prerender = true; // default for static mode
+
+import AppLayout from "../../layouts/AppLayout.astro";
+import UserJobsViewShell from "../../components/social/UserJobsViewShell";
+---
+<AppLayout title="User Jobs">
+  <UserJobsViewShell client:only="react" />
+</AppLayout>

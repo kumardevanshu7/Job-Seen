@@ -1,0 +1,7 @@
+---
+import AppLayout from "../layouts/AppLayout.astro";
+import NotificationsView from "../components/social/NotificationsView";
+---
+<AppLayout title="Notifications">
+  <NotificationsView client:only="react" />
+</AppLayout>

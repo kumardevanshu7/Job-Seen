@@ -1,0 +1,207 @@
+---
+import AppLayout from "../layouts/AppLayout.astro";
+---
+<AppLayout title="Explore Arigato">
+  <div class="explore-container">
+    <div class="explore-content">
+      
+      <header class="explore-header">
+        <h1 class="explore-title">Our Company</h1>
+        <p class="explore-subtitle">Redefining productivity and job tracking for the modern era.</p>
+      </header>
+      
+      <div class="image-section">
+        <img 
+          src="/dev-brand-logo.webp" 
+          alt="Arigato Labs Logo" 
+          class="brand-image"
+        />
+      </div>
+
+      <div class="text-section">
+        <div class="founder-badge">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+          Verified Founder
+        </div>
+        <p class="founder-text">
+          <strong>JobSeen</strong> is proudly developed by <span class="highlight">Kumar Devanshu</span>, the founder of <span class="highlight">Arigato Labs</span> in 2026.
+        </p>
+        <p class="mission-text">
+          Our mission is to build sleek, modern, and high-performance tools that empower individuals and teams to achieve their goals with elegance and ease. We believe software should feel natural, fast, and distinctly beautiful.
+        </p>
+      </div>
+
+      <footer class="explore-footer">
+        <h4 class="legal-title">Legal Disclaimer & License</h4>
+        <p class="legal-copy">
+          Copyright &copy; 2026 Arigato Labs. All Rights Reserved.
+        </p>
+        <p class="legal-copy">
+          Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+        </p>
+        <p class="legal-copy">
+          The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+        </p>
+        <p class="legal-copy muted">
+          THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY.
+        </p>
+      </footer>
+
+    </div>
+  </div>
+</AppLayout>
+
+<style>
+  .explore-container {
+    padding: 80px 20px;
+    display: flex;
+    justify-content: center;
+  }
+
+  .explore-content {
+    max-width: 900px;
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    animation: fadeUp 0.6s ease forwards;
+  }
+
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(20px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .explore-header {
+    text-align: center;
+    margin-bottom: 20px;
+  }
+
+  .explore-title {
+    font-size: 56px;
+    font-weight: 800;
+    letter-spacing: -0.04em;
+    color: var(--ink);
+    margin: 0 0 16px 0;
+    line-height: 1.1;
+  }
+
+  .explore-subtitle {
+    font-size: 22px;
+    color: var(--mute);
+    margin: 0;
+    font-weight: 500;
+    max-width: 600px;
+    margin: 0 auto;
+    line-height: 1.4;
+  }
+
+  .image-section {
+    width: 100%;
+    display: flex;
+    justify-content: center;
+    /* Apply aggressive negative margins to cut out the huge built-in whitespace of the image file */
+    margin-top: -120px;
+    margin-bottom: -100px;
+    pointer-events: none; /* Prevent the invisible padding from blocking clicks */
+  }
+
+  .brand-image {
+    width: 100%;
+    max-width: 650px;
+    height: auto;
+    /* Keeping native theme rounded corners, but no background boxes */
+    border-radius: 8px;
+  }
+
+  .text-section {
+    text-align: center;
+    margin-bottom: 80px;
+    max-width: 750px;
+  }
+
+  .founder-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--ink);
+    font-size: 14px;
+    font-weight: 600;
+    padding: 8px 18px;
+    border-radius: 8px;
+    margin-bottom: 32px;
+    border: 1px solid var(--hairline);
+    background: var(--surface);
+    letter-spacing: 0.02em;
+  }
+
+  .founder-text {
+    font-size: 28px;
+    line-height: 1.5;
+    color: var(--ink);
+    margin: 0 0 32px 0;
+    letter-spacing: -0.02em;
+  }
+
+  .highlight {
+    font-weight: 700;
+  }
+
+  .mission-text {
+    font-size: 18px;
+    line-height: 1.8;
+    color: var(--body);
+    margin: 0;
+  }
+
+  .explore-footer {
+    width: 100%;
+    border-top: 1px solid var(--hairline);
+    padding-top: 50px;
+    text-align: center;
+  }
+
+  .legal-title {
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--ink);
+    margin: 0 0 20px 0;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+
+  .legal-copy {
+    font-size: 14px;
+    line-height: 1.7;
+    color: var(--mute);
+    margin: 0 auto 16px auto;
+    max-width: 800px;
+  }
+  
+  .legal-copy:last-child {
+    margin-bottom: 0;
+  }
+
+  .legal-copy.muted {
+    font-size: 12px;
+    opacity: 0.7;
+  }
+
+  @media (max-width: 768px) {
+    .explore-title { font-size: 38px; }
+    .explore-subtitle { font-size: 18px; }
+    .founder-text { font-size: 22px; }
+    .brand-image { max-width: 100%; padding: 0 20px; }
+    .explore-container { padding: 40px 10px; }
+    
+    .image-section {
+      margin-top: -60px;
+      margin-bottom: -50px;
+    }
+    
+    .explore-header {
+      margin-bottom: 20px;
+    }
+  }
+</style>
+

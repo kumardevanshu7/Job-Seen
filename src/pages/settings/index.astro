@@ -1,0 +1,7 @@
+---
+import AppLayout from "../../layouts/AppLayout.astro";
+import SettingsView from "../../components/settings/SettingsView";
+---
+<AppLayout title="Settings">
+  <SettingsView client:only="react" />
+</AppLayout>

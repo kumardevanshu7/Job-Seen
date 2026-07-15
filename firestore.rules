@@ -1,0 +1,152 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ── Helper functions ──────────────────────────────────────────────────
+
+    function isAuth() {
+      return request.auth != null;
+    }
+
+    function isSelf(uid) {
+      return request.auth.uid == uid;
+    }
+
+    function isSuperAdmin() {
+      // Replace with your actual Super Admin UID
+      return request.auth.uid == "YOUR_SUPER_ADMIN_UID_HERE";
+    }
+
+    function isConnected(uid1, uid2) {
+      return exists(/databases/$(database)/documents/connections/$(uid1 + "_" + uid2))
+          || exists(/databases/$(database)/documents/connections/$(uid2 + "_" + uid1));
+    }
+
+    // ── Users ─────────────────────────────────────────────────────────────
+
+    match /users/{uid} {
+      allow read: if isAuth();
+      allow create: if isAuth() && isSelf(uid);
+      allow update: if isAuth() && (isSelf(uid) || isSuperAdmin());
+      allow delete: if isSuperAdmin();
+    }
+
+    // ── Jobs ──────────────────────────────────────────────────────────────
+
+    match /jobs/{jobId} {
+      allow read: if isAuth() && (
+        isSuperAdmin()
+        || resource.data.ownerUID == request.auth.uid
+        || (
+          // Connected users can read
+          resource.data.ownerUID != request.auth.uid
+        )
+      );
+      allow create: if isAuth() && request.resource.data.ownerUID == request.auth.uid;
+      allow update: if isAuth() && (isSelf(resource.data.ownerUID) || isSuperAdmin());
+      allow delete: if isAuth() && (isSelf(resource.data.ownerUID) || isSuperAdmin());
+    }
+
+    // ── Friend Requests ───────────────────────────────────────────────────
+
+    match /friendRequests/{reqId} {
+      allow read: if isAuth() && (
+        resource.data.senderUID == request.auth.uid
+        || resource.data.receiverUID == request.auth.uid
+        || isSuperAdmin()
+      );
+      allow create: if isAuth() && request.resource.data.senderUID == request.auth.uid;
+      allow update: if isAuth() && (
+        resource.data.receiverUID == request.auth.uid
+        || isSuperAdmin()
+      );
+      allow delete: if isSuperAdmin();
+    }
+
+    // ── Connections ───────────────────────────────────────────────────────
+
+    match /connections/{connId} {
+      allow read: if isAuth() && (
+        resource.data.userA == request.auth.uid
+        || resource.data.userB == request.auth.uid
+        || isSuperAdmin()
+      );
+      allow create: if isAuth();
+      allow update, delete: if isSuperAdmin();
+    }
+
+    // ── Permissions ───────────────────────────────────────────────────────
+
+    match /permissions/{permId} {
+      allow read: if isAuth() && (
+        resource.data.ownerUID == request.auth.uid
+        || resource.data.granteeUID == request.auth.uid
+        || isSuperAdmin()
+      );
+      allow create, update: if isAuth() && (
+        request.resource.data.ownerUID == request.auth.uid
+        || isSuperAdmin()
+      );
+      allow delete: if isAuth() && (
+        resource.data.ownerUID == request.auth.uid
+        || isSuperAdmin()
+      );
+    }
+
+    // ── Notifications ─────────────────────────────────────────────────────
+
+    match /notifications/{notifId} {
+      allow read: if isAuth() && (
+        resource.data.receiverUID == request.auth.uid
+        || isSuperAdmin()
+      );
+      allow create: if isAuth();
+      allow update: if isAuth() && (
+        resource.data.receiverUID == request.auth.uid
+        || isSuperAdmin()
+      );
+      allow delete: if isAuth() && (
+        resource.data.receiverUID == request.auth.uid
+        || isSuperAdmin()
+      );
+    }
+
+    // ── Chats ─────────────────────────────────────────────────────────────
+
+    // Chat document (metadata: lastText, updatedAt)
+    match /chats/{chatId} {
+      // chatId = "uid1_uid2" (sorted). User must be one of the two.
+      allow read, write: if isAuth() && (
+        chatId.split("_")[0] == request.auth.uid
+        || chatId.split("_")[1] == request.auth.uid
+        || isSuperAdmin()
+      );
+
+      // Messages subcollection
+      match /messages/{msgId} {
+        allow read: if isAuth() && (
+          chatId.split("_")[0] == request.auth.uid
+          || chatId.split("_")[1] == request.auth.uid
+          || isSuperAdmin()
+        );
+        allow create: if isAuth() && (
+          request.resource.data.senderUID == request.auth.uid
+          && (
+            chatId.split("_")[0] == request.auth.uid
+            || chatId.split("_")[1] == request.auth.uid
+          )
+        );
+        allow update: if isAuth() && (
+          // Only allow marking messages as read (not editing text)
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(["read"])
+          && (
+            chatId.split("_")[0] == request.auth.uid
+            || chatId.split("_")[1] == request.auth.uid
+          )
+        );
+        allow delete: if isSuperAdmin();
+      }
+    }
+  }
+}

@@ -1,0 +1,11 @@
+---
+import AppLayout from "../../layouts/AppLayout.astro";
+import AdminDashboard from "../../components/admin/AdminDashboard";
+---
+<AppLayout title="Admin" requireAdmin={true}>
+  <div class="page-header">
+    <h1 class="page-title">Super Admin Dashboard</h1>
+    <p class="page-subtitle">Manage the platform.</p>
+  </div>
+  <AdminDashboard client:load />
+</AppLayout>

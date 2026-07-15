@@ -1,0 +1,7 @@
+---
+import AppLayout from "../layouts/AppLayout.astro";
+import ChatView from "../components/chat/ChatView";
+---
+<AppLayout title="Messages – JobSeen">
+  <ChatView client:only="react" />
+</AppLayout>

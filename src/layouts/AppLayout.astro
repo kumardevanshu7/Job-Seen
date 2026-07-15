@@ -1,0 +1,44 @@
+---
+import "../styles/global.css";
+import Sidebar from "../components/layout/Sidebar";
+import AuthProvider from "../components/auth/AuthProvider";
+
+export interface Props {
+  title?: string;
+  requireAdmin?: boolean;
+}
+
+const { title = "JobSeen", requireAdmin = false } = Astro.props;
+---
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="JobSeen – Track, organize, and share job listings with your connections." />
+    <link rel="manifest" href="/manifest.json" />
+    <link rel="icon" type="image/png" href="/icons/icon-192.png" />
+    <meta name="theme-color" content="#fdfcfc" />
+    <title>{title} – JobSeen</title>
+  </head>
+  <body>
+    <AuthProvider requireAdmin={requireAdmin} client:only="react">
+      <div class="page-wrapper">
+        <Sidebar client:only="react" />
+        <main class="main-content">
+          <div class="main-inner">
+            <slot />
+          </div>
+        </main>
+      </div>
+    </AuthProvider>
+    <div id="toast-root"></div>
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('/sw.js').catch(() => {});
+        });
+      }
+    </script>
+  </body>
+</html>

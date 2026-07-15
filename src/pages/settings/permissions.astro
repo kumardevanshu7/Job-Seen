@@ -1,0 +1,11 @@
+---
+import AppLayout from "../../layouts/AppLayout.astro";
+import PermissionsView from "../../components/settings/PermissionsView";
+---
+<AppLayout title="Permissions">
+  <div class="page-header">
+    <h1 class="page-title">Interact With Your Cards</h1>
+    <p class="page-subtitle">Grant connected users permission to copy your job listings.</p>
+  </div>
+  <PermissionsView client:load />
+</AppLayout>

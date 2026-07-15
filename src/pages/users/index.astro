@@ -1,0 +1,7 @@
+---
+import AppLayout from "../../layouts/AppLayout.astro";
+import UsersView from "../../components/social/UsersView";
+---
+<AppLayout title="Other Users">
+  <UsersView client:only="react" />
+</AppLayout>

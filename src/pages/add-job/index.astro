@@ -1,0 +1,7 @@
+---
+import AppLayout from "../../layouts/AppLayout.astro";
+import JobForm from "../../components/jobs/JobForm";
+---
+<AppLayout title="Add Job">
+  <JobForm client:only="react" />
+</AppLayout>
