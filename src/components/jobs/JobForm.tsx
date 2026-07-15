@@ -1,16 +1,30 @@
 import { useState } from "react";
 import { useStore } from "@nanostores/react";
 import { $auth } from "../../stores/authStore";
-import { createJob, type JobType } from "../../lib/firestore";
+import { createJob, type EmploymentType, type JobType } from "../../lib/firestore";
 import { showToast, ToastProvider } from "../ui/Toast";
 
 const ONLINE_VIA = ["Naukri.com", "LinkedIn", "Company Website", "Referral", "Others"];
 const WALKIN_VIA = ["Job hai", "Brute force", "By friend"];
+const EMPLOYMENT_OPTS: { value: EmploymentType; label: string }[] = [
+  { value: "full_time", label: "Full-time job" },
+  { value: "part_time", label: "Part-time" },
+  { value: "internship", label: "Internship" },
+];
+const PPO_OPTS = [
+  { value: "", label: "Not sure" },
+  { value: "yes", label: "Yes — PPO de rahe" },
+  { value: "no", label: "No PPO" },
+  { value: "maybe", label: "Maybe / based on performance" },
+];
 
 interface OnlineForm {
   company: string; location: string; applyLink: string;
   appliedVia: string; appliedViaOther: string;
   ctc: string; role: string; lastDate: string; bond: string; batch: string;
+  employmentType: EmploymentType;
+  internshipMonths: string;
+  ppo: string;
 }
 
 interface WalkinForm {
@@ -18,12 +32,16 @@ interface WalkinForm {
   mapLink: string; nearestMetro: string;
   applyLink: string; appliedVia: string;
   ctc: string; batch: string; bond: string;
+  employmentType: EmploymentType;
+  internshipMonths: string;
+  ppo: string;
 }
 
 const ONLINE_INIT: OnlineForm = {
   company: "", location: "", applyLink: "",
   appliedVia: "LinkedIn", appliedViaOther: "",
   ctc: "", role: "", lastDate: "", bond: "", batch: "",
+  employmentType: "full_time", internshipMonths: "", ppo: "",
 };
 
 const WALKIN_INIT: WalkinForm = {
@@ -31,7 +49,17 @@ const WALKIN_INIT: WalkinForm = {
   mapLink: "", nearestMetro: "",
   applyLink: "", appliedVia: "Job hai",
   ctc: "", batch: "", bond: "",
+  employmentType: "full_time", internshipMonths: "", ppo: "",
 };
+
+function employmentPayload(f: { employmentType: EmploymentType; internshipMonths: string; ppo: string }) {
+  const isIntern = f.employmentType === "internship";
+  return {
+    employmentType: f.employmentType,
+    internshipMonths: isIntern ? f.internshipMonths.trim() : "",
+    ppo: isIntern ? f.ppo : "",
+  };
+}
 
 export default function JobForm() {
   const auth = useStore($auth);
@@ -48,10 +76,102 @@ export default function JobForm() {
     fontFamily: "'JetBrains Mono', 'IBM Plex Mono', ui-monospace, monospace",
   };
 
+  function EmploymentFields({
+    value,
+    months,
+    ppo,
+    onChange,
+  }: {
+    value: EmploymentType;
+    months: string;
+    ppo: string;
+    onChange: (field: "employmentType" | "internshipMonths" | "ppo", v: string) => void;
+  }) {
+    return (
+      <>
+        <div className="form-group">
+          <label className="form-label">role type *</label>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            {EMPLOYMENT_OPTS.map(opt => {
+              const active = value === opt.value;
+              return (
+                <button
+                  key={opt.value}
+                  type="button"
+                  onClick={() => onChange("employmentType", opt.value)}
+                  style={{
+                    fontFamily: "inherit", fontSize: 12, fontWeight: 700,
+                    padding: "8px 12px", borderRadius: 6, cursor: "pointer",
+                    border: active ? "1.5px solid var(--ink)" : "1.5px solid var(--hairline)",
+                    background: active ? "var(--ink)" : "var(--canvas)",
+                    color: active ? "var(--canvas)" : "var(--body)",
+                  }}
+                >
+                  {opt.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {value === "internship" && (
+          <div
+            style={{
+              border: "1.5px solid var(--hairline)",
+              borderRadius: 8,
+              padding: "14px 14px 4px",
+              background: "var(--surface-soft)",
+              display: "flex",
+              flexDirection: "column",
+              gap: 14,
+            }}
+          >
+            <div style={{ fontSize: 11, fontWeight: 700, color: "var(--mute)", letterSpacing: "0.04em" }}>
+              INTERNSHIP DETAILS
+            </div>
+            <div className="two-col">
+              <div className="form-group">
+                <label className="form-label">duration (months)</label>
+                <input
+                  className="form-input"
+                  inputMode="numeric"
+                  placeholder="e.g. 3, 6"
+                  value={months}
+                  onChange={e => onChange("internshipMonths", e.target.value.replace(/[^\d.]/g, "").slice(0, 4))}
+                  style={inputStyle}
+                />
+              </div>
+              <div className="form-group">
+                <label className="form-label">PPO offer?</label>
+                <select
+                  className="form-select"
+                  value={ppo}
+                  onChange={e => onChange("ppo", e.target.value)}
+                  style={inputStyle}
+                >
+                  {PPO_OPTS.map(o => (
+                    <option key={o.value || "unsure"} value={o.value}>{o.label}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            <div className="form-group" style={{ marginTop: -6 }}>
+              <span className="form-hint">CTC / stipend field me stipend bhi likh sakte ho.</span>
+            </div>
+          </div>
+        )}
+      </>
+    );
+  }
+
   async function submitOnline(e: React.FormEvent) {
     e.preventDefault();
     if (!online.applyLink.trim()) { showToast("Apply link is required.", "error"); return; }
     if (!online.role.trim()) { showToast("Role is required.", "error"); return; }
+    if (online.employmentType === "internship" && !online.internshipMonths.trim()) {
+      showToast("Internship duration (months) daalo.", "error");
+      return;
+    }
     if (!auth.user || !auth.profile) { showToast("Not logged in.", "error"); return; }
     setLoading(true);
     try {
@@ -70,6 +190,7 @@ export default function JobForm() {
         mapLink: "",
         nearestMetro: "",
         routeOrder: 0,
+        ...employmentPayload(online),
       });
       setDone(true);
       showToast("Job added.", "success");
@@ -86,6 +207,10 @@ export default function JobForm() {
     if (!walkin.role.trim()) { showToast("Role is required.", "error"); return; }
     if (!walkin.company.trim()) { showToast("Company is required.", "error"); return; }
     if (!walkin.location.trim()) { showToast("Location is required.", "error"); return; }
+    if (walkin.employmentType === "internship" && !walkin.internshipMonths.trim()) {
+      showToast("Internship duration (months) daalo.", "error");
+      return;
+    }
     if (!auth.user || !auth.profile) { showToast("Not logged in.", "error"); return; }
     setLoading(true);
     try {
@@ -106,6 +231,7 @@ export default function JobForm() {
         routeOrder: Date.now(),
         onRoute: true,
         status: "pending",
+        ...employmentPayload(walkin),
       });
       setDone(true);
       showToast("Walk-in added.", "success");
@@ -137,7 +263,6 @@ export default function JobForm() {
         </p>
       </div>
 
-      {/* Type picker */}
       {jobType === null && (
         <div
           className="job-type-picker"
@@ -181,7 +306,6 @@ export default function JobForm() {
         </div>
       )}
 
-      {/* Online form */}
       {jobType === "online" && (
         <div className="form-card" style={{ maxWidth: 620 }}>
           <button
@@ -199,6 +323,13 @@ export default function JobForm() {
               <label className="form-label">role *</label>
               <input className="form-input" placeholder="Frontend Developer, SDE Intern…" value={online.role} onChange={e => setO("role", e.target.value)} style={inputStyle} required />
             </div>
+
+            <EmploymentFields
+              value={online.employmentType}
+              months={online.internshipMonths}
+              ppo={online.ppo}
+              onChange={(f, v) => setO(f, v)}
+            />
 
             <div className="two-col">
               <div className="form-group">
@@ -224,8 +355,16 @@ export default function JobForm() {
                 </select>
               </div>
               <div className="form-group">
-                <label className="form-label">ctc</label>
-                <input className="form-input" placeholder="6 LPA, ₹8–10 LPA" value={online.ctc} onChange={e => setO("ctc", e.target.value)} style={inputStyle} />
+                <label className="form-label">
+                  {online.employmentType === "internship" ? "stipend / ctc" : "ctc"}
+                </label>
+                <input
+                  className="form-input"
+                  placeholder={online.employmentType === "internship" ? "₹15–20k /month" : "6 LPA, ₹8–10 LPA"}
+                  value={online.ctc}
+                  onChange={e => setO("ctc", e.target.value)}
+                  style={inputStyle}
+                />
               </div>
             </div>
 
@@ -263,7 +402,6 @@ export default function JobForm() {
         </div>
       )}
 
-      {/* Walk-in form */}
       {jobType === "walkin" && (
         <div className="form-card" style={{ maxWidth: 620 }}>
           <button
@@ -281,6 +419,13 @@ export default function JobForm() {
               <label className="form-label">role *</label>
               <input className="form-input" placeholder="Frontend Developer, SDE Intern…" value={walkin.role} onChange={e => setW("role", e.target.value)} style={inputStyle} required />
             </div>
+
+            <EmploymentFields
+              value={walkin.employmentType}
+              months={walkin.internshipMonths}
+              ppo={walkin.ppo}
+              onChange={(f, v) => setW(f, v)}
+            />
 
             <div className="two-col">
               <div className="form-group">
@@ -316,8 +461,17 @@ export default function JobForm() {
                 </select>
               </div>
               <div className="form-group">
-                <label className="form-label">ctc <span style={{ color: "var(--mute)", fontWeight: 500 }}>(if available)</span></label>
-                <input className="form-input" placeholder="6 LPA, ₹8–10 LPA" value={walkin.ctc} onChange={e => setW("ctc", e.target.value)} style={inputStyle} />
+                <label className="form-label">
+                  {walkin.employmentType === "internship" ? "stipend / ctc" : "ctc"}{" "}
+                  <span style={{ color: "var(--mute)", fontWeight: 500 }}>(if available)</span>
+                </label>
+                <input
+                  className="form-input"
+                  placeholder={walkin.employmentType === "internship" ? "₹15–20k /month" : "6 LPA, ₹8–10 LPA"}
+                  value={walkin.ctc}
+                  onChange={e => setW("ctc", e.target.value)}
+                  style={inputStyle}
+                />
               </div>
             </div>
 

@@ -255,6 +255,28 @@ export default function JobCard({ job, showCopy = true, isOwner = false, onDelet
         <span className="shrink-hide" style={{ background: "#f5f3f3", border: "1px solid var(--hairline,#e2dede)", color: "var(--body,#423e3e)", fontSize: 11, fontWeight: 600, padding: "3px 8px", borderRadius: 3 }}>
           source: {platform}
         </span>
+        {job.employmentType && (
+          <span style={{ background: "#eff6ff", border: "1px solid #bfdbfe", color: "#1d4ed8", fontSize: 11, fontWeight: 600, padding: "3px 8px", borderRadius: 3 }}>
+            {job.employmentType === "full_time" ? "full-time"
+              : job.employmentType === "part_time" ? "part-time"
+              : "internship"}
+          </span>
+        )}
+        {job.employmentType === "internship" && job.internshipMonths && (
+          <span style={{ background: "#f5f3ff", border: "1px solid #ddd6fe", color: "#6d28d9", fontSize: 11, padding: "3px 8px", borderRadius: 3 }}>
+            {job.internshipMonths} mo
+          </span>
+        )}
+        {job.employmentType === "internship" && job.ppo && (
+          <span style={{
+            background: job.ppo === "yes" ? "#f0faf4" : "#fafaf9",
+            border: job.ppo === "yes" ? "1px solid #b7eb8f" : "1px solid #d6d3d1",
+            color: job.ppo === "yes" ? "#1a7a3c" : "#78716c",
+            fontSize: 11, fontWeight: 600, padding: "3px 8px", borderRadius: 3,
+          }}>
+            PPO: {job.ppo === "yes" ? "yes" : job.ppo === "no" ? "no" : "maybe"}
+          </span>
+        )}
         {job.location && (
           <span style={{ background: "#f5f3f3", border: "1px solid var(--hairline,#e2dede)", color: "var(--body,#423e3e)", fontSize: 11, padding: "3px 8px", borderRadius: 3 }}>
             ⌖ {job.location}

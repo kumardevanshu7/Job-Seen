@@ -515,6 +515,19 @@ export default function WalkInRouteView() {
                     {job.role}
                   </div>
                   <div style={{ fontSize: 12, color: "var(--mute)", display: "flex", flexWrap: "wrap", gap: "4px 12px" }}>
+                    {job.employmentType && (
+                      <span>
+                        {job.employmentType === "full_time" ? "full-time"
+                          : job.employmentType === "part_time" ? "part-time"
+                          : "internship"}
+                      </span>
+                    )}
+                    {job.employmentType === "internship" && job.internshipMonths && (
+                      <span>{job.internshipMonths} mo</span>
+                    )}
+                    {job.employmentType === "internship" && job.ppo && (
+                      <span>PPO: {job.ppo}</span>
+                    )}
                     {job.location && <span>📍 {job.location}</span>}
                     {job.nearestMetro && <span>🚇 {job.nearestMetro}</span>}
                     {job.appliedVia && <span>via {job.appliedVia}</span>}

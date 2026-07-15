@@ -31,6 +31,8 @@ export interface UserProfile {
 
 export type JobType = 'online' | 'walkin';
 
+export type EmploymentType = 'full_time' | 'part_time' | 'internship';
+
 export type JobStatus =
   | 'pending'
   | 'applied'
@@ -70,6 +72,10 @@ export interface JobCard {
   nearestMetro?: string;
   routeOrder?: number;   // custom visit order for walk-ins / routed online
   onRoute?: boolean;     // optional: include online job on Walk-in Route
+  // Role kind
+  employmentType?: EmploymentType; // full_time | part_time | internship
+  internshipMonths?: string;       // e.g. "3"
+  ppo?: string;                    // "yes" | "no" | "maybe" | ""
 }
 
 export interface Connection {
