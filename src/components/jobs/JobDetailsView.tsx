@@ -123,16 +123,17 @@ function buildShareHtml(job: JobCardType): string {
       line-height: 1.45;
     }
     .wrap { max-width: 560px; margin: 0 auto; }
+    .company-title {
+      font-size: 32px; font-weight: 800; color: #201d1d;
+      letter-spacing: -0.02em; line-height: 1.15;
+      margin: 0 4px 14px;
+    }
     .card {
       background: #fdfcfc;
       border: 1.5px solid #e2dede;
       border-radius: 12px;
-      padding: 24px 20px 20px;
+      padding: 22px 20px 20px;
       box-shadow: 0 10px 30px rgba(0,0,0,0.06);
-    }
-    .company-title {
-      font-size: 28px; font-weight: 800; color: #201d1d;
-      letter-spacing: -0.02em; line-height: 1.15; margin-bottom: 6px;
     }
     .role {
       font-size: 15px; font-weight: 600; color: #6e6e73;
@@ -192,8 +193,8 @@ function buildShareHtml(job: JobCardType): string {
 </head>
 <body>
   <div class="wrap">
+    <div class="company-title">${esc(company)}</div>
     <div class="card">
-      <div class="company-title">${esc(company)}</div>
       <div class="role">${esc(role)}</div>
       <div class="grid">
         ${rowHtml("Role type", employmentLabel(job.employmentType))}
@@ -211,7 +212,7 @@ function buildShareHtml(job: JobCardType): string {
     </div>
     <div class="product-box">
       <div class="tag">Shareable job card</div>
-      <div class="name">Yeh product <strong>JobSeen</strong> by <strong>Arigato Labs</strong> ka hai</div>
+      <div class="name">This product is <strong>JobSeen</strong> by <strong>Arigato Labs</strong></div>
       <a class="site" href="https://job-seen.vercel.app/" target="_blank" rel="noopener noreferrer">https://job-seen.vercel.app/</a>
     </div>
   </div>
