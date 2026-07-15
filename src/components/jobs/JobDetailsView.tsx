@@ -89,12 +89,13 @@ function rowHtml(label: string, value: string, href?: string) {
 }
 
 function buildShareHtml(job: JobCardType): string {
-  const status = STATUS_CONFIG[job.status ?? "pending"] ?? STATUS_CONFIG.pending;
   const source = job.appliedVia === "Others"
     ? (job.appliedViaOther || "Others")
     : (job.appliedVia || "—");
   const batch = Array.isArray(job.batch) && job.batch.length ? job.batch.join(", ") : "—";
-  const title = `${job.company || "Company"} — ${job.role || "Role"}`;
+  const company = job.company || "Company";
+  const role = job.role || "Job Role";
+  const title = `${company} — ${role}`;
 
   let extra = "";
   if (job.employmentType === "internship") {
@@ -105,8 +106,6 @@ function buildShareHtml(job: JobCardType): string {
     extra += rowHtml("Nearest metro", job.nearestMetro || "—");
     if (job.mapLink) extra += rowHtml("Map link", job.mapLink, job.mapLink);
   }
-  if (job.cancelReason) extra += rowHtml("Cancel reason", job.cancelReason);
-  if (job.copiedFromUsername) extra += rowHtml("Copied from", `@${job.copiedFromUsername}`);
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -124,32 +123,20 @@ function buildShareHtml(job: JobCardType): string {
       line-height: 1.45;
     }
     .wrap { max-width: 560px; margin: 0 auto; }
-    .brand {
-      font-size: 11px; font-weight: 700; letter-spacing: 0.12em;
-      color: #8a8585; margin-bottom: 12px; text-transform: uppercase;
-    }
     .card {
       background: #fdfcfc;
       border: 1.5px solid #e2dede;
       border-radius: 12px;
-      padding: 22px 20px;
+      padding: 24px 20px 20px;
       box-shadow: 0 10px 30px rgba(0,0,0,0.06);
     }
-    .top { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 12px; }
-    .company {
-      background: #201d1d; color: #fdfcfc;
-      font-size: 11px; font-weight: 700; letter-spacing: 0.06em;
-      text-transform: uppercase; padding: 4px 9px; border-radius: 4px;
+    .company-title {
+      font-size: 28px; font-weight: 800; color: #201d1d;
+      letter-spacing: -0.02em; line-height: 1.15; margin-bottom: 6px;
     }
-    .status {
-      font-size: 11px; font-weight: 700;
-      color: ${status.color}; background: ${status.bg};
-      border: 1px solid ${status.border};
-      padding: 3px 10px; border-radius: 999px;
-    }
-    h1 {
-      font-size: 22px; font-weight: 700; color: #201d1d;
-      margin-bottom: 18px; line-height: 1.3;
+    .role {
+      font-size: 15px; font-weight: 600; color: #6e6e73;
+      margin-bottom: 18px; line-height: 1.35;
     }
     .grid { display: grid; gap: 10px; }
     .row {
@@ -174,20 +161,40 @@ function buildShareHtml(job: JobCardType): string {
       padding: 11px 16px; border-radius: 6px;
     }
     .cta:hover { background: #302c2c; color: #fdfcfc !important; }
-    .foot {
-      margin-top: 16px; font-size: 11px; color: #8a8585; text-align: center;
+    .product-box {
+      margin-top: 14px;
+      border: 1.5px solid #e2dede;
+      border-radius: 10px;
+      background: #fdfcfc;
+      padding: 14px 16px;
+      text-align: center;
     }
+    .product-box .tag {
+      font-size: 10px; font-weight: 700; letter-spacing: 0.1em;
+      text-transform: uppercase; color: #8a8585; margin-bottom: 6px;
+    }
+    .product-box .name {
+      font-size: 13px; font-weight: 700; color: #201d1d; margin-bottom: 8px;
+    }
+    .product-box .site {
+      display: inline-block;
+      font-size: 12px; font-weight: 700;
+      color: #1d4ed8;
+      background: #eff6ff;
+      border: 1px solid #bfdbfe;
+      border-radius: 6px;
+      padding: 8px 12px;
+      text-decoration: none;
+      word-break: break-all;
+    }
+    .product-box .site:hover { color: #c0392b; border-color: #f5c6c6; background: #fff5f5; }
   </style>
 </head>
 <body>
   <div class="wrap">
-    <div class="brand">JobSeen share card</div>
     <div class="card">
-      <div class="top">
-        <span class="company">${esc(job.company || "Company")}</span>
-        <span class="status">${esc(status.label)}</span>
-      </div>
-      <h1>${esc(job.role || "Job Role")}</h1>
+      <div class="company-title">${esc(company)}</div>
+      <div class="role">${esc(role)}</div>
       <div class="grid">
         ${rowHtml("Role type", employmentLabel(job.employmentType))}
         ${rowHtml("Location", job.location || "—")}
@@ -196,15 +203,17 @@ function buildShareHtml(job: JobCardType): string {
         ${rowHtml("Eligible batch", batch)}
         ${rowHtml("Bond", job.bond || "—")}
         ${rowHtml("Last date", formatDay(job.lastDate))}
-        ${rowHtml("Added on", formatLong(job.createdAt))}
-        ${rowHtml("Applied on", job.appliedAt ? formatLong(job.appliedAt) : "Not applied yet")}
-        ${rowHtml("Added by", `@${job.ownerUsername || "—"}`)}
+        ${rowHtml("Shared by", `@${job.ownerUsername || "—"}`)}
         ${extra}
         ${job.applyLink ? rowHtml("Apply link", job.applyLink, job.applyLink) : rowHtml("Apply link", "—")}
       </div>
       ${job.applyLink ? `<a class="cta" href="${esc(job.applyLink)}" target="_blank" rel="noopener noreferrer">Open Apply Link ↗</a>` : ""}
     </div>
-    <div class="foot">Shared via JobSeen · open this HTML file in any browser</div>
+    <div class="product-box">
+      <div class="tag">Shareable job card</div>
+      <div class="name">Yeh product <strong>JobSeen</strong> by <strong>Arigato Labs</strong> ka hai</div>
+      <a class="site" href="https://job-seen.vercel.app/" target="_blank" rel="noopener noreferrer">https://job-seen.vercel.app/</a>
+    </div>
   </div>
 </body>
 </html>`;
