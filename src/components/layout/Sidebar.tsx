@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { useStore } from "@nanostores/react";
 import { $auth } from "../../stores/authStore";
 import { $notifications } from "../../stores/notificationStore";
@@ -20,6 +21,7 @@ const icons: Record<string, string> = {
 const primaryNav = [
   { href: "/",                     label: "Inbox",         icon: "⊙" },
   { href: "/add-job",              label: "Add Job",       icon: "+" },
+  { href: "/walk-in",              label: "Walk-in Route", icon: "⌁" },
 ];
 
 const secondaryNav = [
@@ -36,8 +38,23 @@ export default function Sidebar() {
   const notifications = useStore($notifications);
   const unreadChat = useStore($unreadChatCount);
   const unread = notifications.filter(n => n.status === "unread").length;
-  const path = typeof window !== "undefined" ? window.location.pathname : "";
+  const [path, setPath] = useState(
+    typeof window !== "undefined" ? window.location.pathname : ""
+  );
   const admin = auth.user ? isAdmin(auth.user.uid) : false;
+
+  useEffect(() => {
+    const sync = () => setPath(window.location.pathname);
+    document.addEventListener("astro:page-load", sync);
+    document.addEventListener("astro:after-swap", sync);
+    window.addEventListener("popstate", sync);
+    sync();
+    return () => {
+      document.removeEventListener("astro:page-load", sync);
+      document.removeEventListener("astro:after-swap", sync);
+      window.removeEventListener("popstate", sync);
+    };
+  }, []);
 
   async function handleSignOut() {
     await signOut();
@@ -50,7 +67,11 @@ export default function Sidebar() {
     const isActive = active || isPermissions;
 
     return (
-      <a href={href} className={`nav-item ${isActive ? "active" : ""}`}>
+      <a
+        href={href}
+        className={`nav-item ${isActive ? "active" : ""}`}
+        onClick={() => setPath(href)}
+      >
         {icon === "image" ? (
           <span className="nav-item-icon" style={{ display: "inline-flex", alignItems: "center", justifyContent: "center" }}>
             <img src="/arigato-single-logo.png" alt="icon" style={{ width: 17, height: 17, objectFit: "contain" }} />
@@ -165,35 +186,39 @@ export default function Sidebar() {
 
       {/* ── Mobile Fixed Bottom Navigation Bar ── */}
       <nav className="mobile-bottom-nav">
-        <a href="/" className={`mobile-nav-item ${path === "/" ? "active" : ""}`}>
+        <a href="/" className={`mobile-nav-item ${path === "/" ? "active" : ""}`} onClick={() => setPath("/")}>
           <span className="mobile-nav-item-icon">⊙</span>
           <span>Inbox</span>
         </a>
-        <a href="/add-job" className={`mobile-nav-item ${path === "/add-job" ? "active" : ""}`}>
+        <a href="/add-job" className={`mobile-nav-item ${path === "/add-job" ? "active" : ""}`} onClick={() => setPath("/add-job")}>
           <span className="mobile-nav-item-icon">+</span>
           <span>Add Job</span>
         </a>
-        <a href="/chat" className={`mobile-nav-item ${path === "/chat" ? "active" : ""}`}>
+        <a href="/walk-in" className={`mobile-nav-item ${path === "/walk-in" || path.startsWith("/walk-in/") ? "active" : ""}`} onClick={() => setPath("/walk-in")}>
+          <span className="mobile-nav-item-icon">⌁</span>
+          <span>Route</span>
+        </a>
+        <a href="/chat" className={`mobile-nav-item ${path === "/chat" ? "active" : ""}`} onClick={() => setPath("/chat")}>
           <span className="mobile-nav-item-icon">◫</span>
           <span>Messages</span>
           {unreadChat > 0 && <span className="mobile-nav-badge">{unreadChat}</span>}
         </a>
-        <a href="/users" className={`mobile-nav-item ${path === "/users" ? "active" : ""}`}>
+        <a href="/users" className={`mobile-nav-item ${path === "/users" ? "active" : ""}`} onClick={() => setPath("/users")}>
           <span className="mobile-nav-item-icon">⊕</span>
           <span>Users</span>
         </a>
-        <a href="/notifications" className={`mobile-nav-item ${path === "/notifications" ? "active" : ""}`}>
+        <a href="/notifications" className={`mobile-nav-item ${path === "/notifications" ? "active" : ""}`} onClick={() => setPath("/notifications")}>
           <span className="mobile-nav-item-icon">○</span>
           <span>Notifs</span>
           {unread > 0 && <span className="mobile-nav-badge">{unread}</span>}
         </a>
-        <a href="/explore" className={`mobile-nav-item ${path === "/explore" ? "active" : ""}`}>
+        <a href="/explore" className={`mobile-nav-item ${path === "/explore" ? "active" : ""}`} onClick={() => setPath("/explore")}>
           <span className="mobile-nav-item-icon" style={{ display: "inline-flex", alignItems: "center" }}>
             <img src="/arigato-single-logo.png" alt="Explore" style={{ width: 14, height: 14, objectFit: "contain" }} />
           </span>
           <span>Explore</span>
         </a>
-        <a href="/settings" className={`mobile-nav-item ${path.startsWith("/settings") ? "active" : ""}`}>
+        <a href="/settings" className={`mobile-nav-item ${path.startsWith("/settings") ? "active" : ""}`} onClick={() => setPath("/settings")}>
           <span className="mobile-nav-item-icon">◎</span>
           <span>Settings</span>
         </a>

@@ -131,13 +131,13 @@ export default function ChatView() {
       </div>
       <div style={{ flex: 1, overflowY: "auto" }}>
         {loadingContacts ? (
-          <div>
-            {[1, 2, 3].map(i => (
+          <div style={{ padding: "8px 0" }}>
+            {[1, 2, 3, 4].map(i => (
               <div key={i} style={{ padding: "12px 16px", display: "flex", gap: 12, alignItems: "center" }}>
-                <div className="shimmer-bg" style={{ width: 40, height: 40, borderRadius: "50%" }} />
+                <div className="shimmer-bg" style={{ width: 40, height: 40, borderRadius: "50%", flexShrink: 0 }} />
                 <div style={{ flex: 1 }}>
-                  <div className="shimmer-bg" style={{ height: 14, width: "60%", borderRadius: 4, marginBottom: 6 }} />
-                  <div className="shimmer-bg" style={{ height: 10, width: "40%", borderRadius: 4 }} />
+                  <div className="shimmer-bg shimmer-line" style={{ height: 14, width: "62%", marginBottom: 8 }} />
+                  <div className="shimmer-bg shimmer-line" style={{ height: 10, width: "38%" }} />
                 </div>
               </div>
             ))}

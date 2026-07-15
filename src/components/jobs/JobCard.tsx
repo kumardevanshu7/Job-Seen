@@ -1,10 +1,11 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useStore } from "@nanostores/react";
 import { $auth } from "../../stores/authStore";
-import { copyJob, getPermission, updateJobStatus } from "../../lib/firestore";
+import { copyJob, getPermission, updateJobStatus, setJobOnRoute } from "../../lib/firestore";
 import type { JobCard as JobCardType, JobStatus } from "../../lib/firestore";
 import { showToast } from "../ui/Toast";
 import { serverTimestamp } from "firebase/firestore";
+import ReasonModal from "../ui/ReasonModal";
 
 interface Props {
   job: JobCardType;
@@ -47,12 +48,15 @@ function daysSince(d: any): number {
 }
 
 const STATUS_CONFIG: Record<JobStatus, { label: string; color: string; bg: string; border: string }> = {
-  pending:     { label: "Not Applied",       color: "#c0392b", bg: "#fff5f5", border: "#f5c6c6" },
-  applied:     { label: "Applied ✓",         color: "#1a7a3c", bg: "#f0faf4", border: "#b7eb8f" },
-  in_progress: { label: "Pending ⏳",        color: "#b45309", bg: "#fffbeb", border: "#fde68a" },
-  no_response: { label: "No Response Yet",   color: "#7c3aed", bg: "#faf5ff", border: "#d8b4fe" },
-  rejected:    { label: "Rejected",          color: "#6b7280", bg: "#f9fafb", border: "#d1d5db" },
-  selected:    { label: "🎉 Selected!",      color: "#92400e", bg: "#fef3c7", border: "#fcd34d" },
+  pending:         { label: "Not Applied",       color: "#c0392b", bg: "#fff5f5", border: "#f5c6c6" },
+  applied:         { label: "Applied ✓",         color: "#1a7a3c", bg: "#f0faf4", border: "#b7eb8f" },
+  in_progress:     { label: "Pending ⏳",        color: "#b45309", bg: "#fffbeb", border: "#fde68a" },
+  no_response:     { label: "No Response Yet",   color: "#7c3aed", bg: "#faf5ff", border: "#d8b4fe" },
+  rejected:        { label: "Rejected",          color: "#6b7280", bg: "#f9fafb", border: "#d1d5db" },
+  selected:        { label: "🎉 Selected!",      color: "#92400e", bg: "#fef3c7", border: "#fcd34d" },
+  interview_done:  { label: "Interview done",    color: "#1a7a3c", bg: "#f0faf4", border: "#b7eb8f" },
+  fraud:           { label: "Fraud",             color: "#9b1c1c", bg: "#fef2f2", border: "#fecaca" },
+  cancelled:       { label: "Cancelled",         color: "#78716c", bg: "#fafaf9", border: "#d6d3d1" },
 };
 
 const platformShort: Record<string, string> = {
@@ -69,14 +73,23 @@ export default function JobCard({ job, showCopy = true, isOwner = false, onDelet
   const [hasCopied, setHasCopied] = useState(false);
   const [updating, setUpdating] = useState(false);
   const [localStatus, setLocalStatus] = useState<JobStatus>(job.status ?? "pending");
+  const [showCancelReason, setShowCancelReason] = useState(false);
+  const [onRoute, setOnRoute] = useState(!!job.onRoute);
+
+  // keep local flags in sync with live firestore updates
+  useEffect(() => {
+    setLocalStatus(job.status ?? "pending");
+    setOnRoute(!!job.onRoute);
+  }, [job.status, job.onRoute]);
 
   const status = localStatus;
-  const cfg = STATUS_CONFIG[status];
+  const cfg = STATUS_CONFIG[status] ?? STATUS_CONFIG.pending;
   const daysApplied = daysSince(job.appliedAt);
   const showReminder = isOwner
     && status === "applied"
     && daysApplied >= 3
     && !job.reminderDismissedAt;
+  const isOnline = (job.jobType ?? "online") === "online";
 
   const platform = job.appliedVia === "Others"
     ? (job.appliedViaOther || "other")
@@ -103,18 +116,19 @@ export default function JobCard({ job, showCopy = true, isOwner = false, onDelet
     }
   }
 
-  async function setStatus(newStatus: JobStatus) {
+  async function setStatus(newStatus: JobStatus, extra?: { cancelReason?: string }) {
     if (!isOwner) return;
     setUpdating(true);
     try {
-      const extra: any = {};
-      if (newStatus === "applied") extra.appliedAt = serverTimestamp();
-      await updateJobStatus(job.id, newStatus, extra);
+      const payload: any = { ...extra };
+      if (newStatus === "applied") payload.appliedAt = serverTimestamp();
+      await updateJobStatus(job.id, newStatus, payload);
       setLocalStatus(newStatus);
       showToast(
         newStatus === "applied"   ? "Marked as Applied! ✓" :
         newStatus === "selected"  ? "Congratulations! 🎉" :
         newStatus === "rejected"  ? "Marked as Rejected." :
+        newStatus === "cancelled" ? "Marked as Cancelled." :
         newStatus === "no_response" ? "Noted. We'll remind you again later." :
         "Status updated.",
         newStatus === "selected" ? "success" : "info"
@@ -129,12 +143,38 @@ export default function JobCard({ job, showCopy = true, isOwner = false, onDelet
   async function dismissReminder(response: "no_response" | "selected" | "rejected") {
     await setStatus(response);
     if (response === "no_response") {
-      // Also save dismissedAt so reminder resets for next check
       await updateJobStatus(job.id, "no_response", { reminderDismissedAt: serverTimestamp() });
     }
   }
 
+  async function toggleRoute(e: React.MouseEvent) {
+    e.stopPropagation();
+    if (!isOwner) return;
+    const next = !onRoute;
+    setOnRoute(next);
+    try {
+      await setJobOnRoute(job.id, next);
+      showToast(next ? "Added to Walk-in Route." : "Removed from Walk-in Route.", "info");
+    } catch {
+      setOnRoute(!next);
+      showToast("Couldn’t update route.", "error");
+    }
+  }
+
   return (
+    <>
+    {showCancelReason && (
+      <ReasonModal
+        title="Why cancelled?"
+        hint="Short mein likh do — kyu cancel kiya."
+        confirmLabel="Mark Cancelled"
+        onCancel={() => setShowCancelReason(false)}
+        onConfirm={async (reason) => {
+          setShowCancelReason(false);
+          await setStatus("cancelled", { cancelReason: reason });
+        }}
+      />
+    )}
     <div
       className="job-card"
       draggable={draggable}
@@ -152,6 +192,7 @@ export default function JobCard({ job, showCopy = true, isOwner = false, onDelet
         position: "relative",
         transition: "all 0.2s ease",
         cursor: draggable ? "grab" : (onClick ? "pointer" : "default"),
+        opacity: status === "cancelled" ? 0.88 : 1,
       }}
     >
       {/* ── Header Row ── */}
@@ -239,6 +280,16 @@ export default function JobCard({ job, showCopy = true, isOwner = false, onDelet
             applied {daysApplied === 0 ? "today" : `${daysApplied}d ago`}
           </span>
         )}
+        {status === "cancelled" && (
+          <span style={{ background: "#fafaf9", border: "1px solid #d6d3d1", color: "#78716c", fontSize: 11, padding: "3px 8px", borderRadius: 3 }}>
+            why: {job.cancelReason || "—"}
+          </span>
+        )}
+        {onRoute && isOnline && (
+          <span style={{ background: "#fff7ed", border: "1px solid #fdba74", color: "#c2410c", fontSize: 11, padding: "3px 8px", borderRadius: 3 }}>
+            on route
+          </span>
+        )}
       </div>
 
       {/* ── 3-Day Reminder Banner ── */}
@@ -277,7 +328,7 @@ export default function JobCard({ job, showCopy = true, isOwner = false, onDelet
       )}
 
       {/* ── Action Status Buttons (owner only) ── */}
-      {isOwner && status !== "rejected" && status !== "selected" && variant !== "kanban" && (
+      {isOwner && status !== "rejected" && status !== "selected" && status !== "cancelled" && variant !== "kanban" && (
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           {status === "pending" && (
             <>
@@ -309,7 +360,19 @@ export default function JobCard({ job, showCopy = true, isOwner = false, onDelet
               <button onClick={(e) => { e.stopPropagation(); setStatus("rejected"); }} disabled={updating} style={{ marginLeft: 6, fontSize: 12, padding: "4px 10px", borderRadius: 4, cursor: "pointer", background: "#f1f5f9", border: "1px solid #cbd5e1", color: "#475569", fontFamily: "inherit" }}>
                 <span className="shrink-hide">Rejected </span>❌
               </button>
+              <button onClick={(e) => { e.stopPropagation(); setShowCancelReason(true); }} disabled={updating} style={{ marginLeft: 6, fontSize: 12, padding: "4px 10px", borderRadius: 4, cursor: "pointer", background: "#fafaf9", border: "1px solid #d6d3d1", color: "#78716c", fontFamily: "inherit" }}>
+                <span className="shrink-hide">Cancelled </span>⊘
+              </button>
             </div>
+          )}
+          {status === "pending" && (
+            <button
+              onClick={(e) => { e.stopPropagation(); setShowCancelReason(true); }}
+              disabled={updating}
+              style={{ fontSize: 12, padding: "6px 12px", borderRadius: 4, cursor: "pointer", background: "#fafaf9", border: "1px solid #d6d3d1", color: "#78716c", fontFamily: "inherit" }}
+            >
+              Cancelled ⊘
+            </button>
           )}
         </div>
       )}
@@ -337,6 +400,20 @@ export default function JobCard({ job, showCopy = true, isOwner = false, onDelet
           )}
         </div>
         <div style={{ display: "flex", gap: 8 }}>
+          {isOwner && isOnline && variant !== "kanban" && (
+            <button
+              onClick={toggleRoute}
+              style={{
+                background: onRoute ? "#fff7ed" : "transparent",
+                color: onRoute ? "#c2410c" : "var(--ink,#201d1d)",
+                border: onRoute ? "1px solid #fdba74" : "1px solid var(--hairline,#e2dede)",
+                padding: "5px 10px", borderRadius: 3, fontSize: 12, fontWeight: 600,
+                cursor: "pointer", fontFamily: "inherit",
+              }}
+            >
+              {onRoute ? "On Route ✓" : "+ Route"}
+            </button>
+          )}
           <a href={job.applyLink} target="_blank" rel="noopener noreferrer"
             style={{ background: "var(--ink,#201d1d)", color: "var(--canvas,#fdfcfc)", padding: "6px 14px", borderRadius: 3, fontSize: 12, fontWeight: 700, textDecoration: "none" }}
             onClick={(e) => { e.stopPropagation(); if (isOwner && status === "pending") setStatus("applied"); }}
@@ -360,5 +437,6 @@ export default function JobCard({ job, showCopy = true, isOwner = false, onDelet
         </div>
       </div>
     </div>
+    </>
   );
 }

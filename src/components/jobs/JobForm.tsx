@@ -1,51 +1,75 @@
 import { useState } from "react";
 import { useStore } from "@nanostores/react";
 import { $auth } from "../../stores/authStore";
-import { createJob } from "../../lib/firestore";
+import { createJob, type JobType } from "../../lib/firestore";
 import { showToast, ToastProvider } from "../ui/Toast";
 
-const APPLIED_VIA_OPTIONS = [
-  "Naukri.com", "LinkedIn", "Company Website", "Referral", "Others",
-];
+const ONLINE_VIA = ["Naukri.com", "LinkedIn", "Company Website", "Referral", "Others"];
+const WALKIN_VIA = ["Job hai", "Brute force", "By friend"];
 
-interface FormData {
+interface OnlineForm {
   company: string; location: string; applyLink: string;
   appliedVia: string; appliedViaOther: string;
   ctc: string; role: string; lastDate: string; bond: string; batch: string;
 }
 
-const INIT: FormData = {
+interface WalkinForm {
+  role: string; company: string; location: string;
+  mapLink: string; nearestMetro: string;
+  applyLink: string; appliedVia: string;
+  ctc: string; batch: string; bond: string;
+}
+
+const ONLINE_INIT: OnlineForm = {
   company: "", location: "", applyLink: "",
   appliedVia: "LinkedIn", appliedViaOther: "",
   ctc: "", role: "", lastDate: "", bond: "", batch: "",
 };
 
+const WALKIN_INIT: WalkinForm = {
+  role: "", company: "", location: "",
+  mapLink: "", nearestMetro: "",
+  applyLink: "", appliedVia: "Job hai",
+  ctc: "", batch: "", bond: "",
+};
+
 export default function JobForm() {
   const auth = useStore($auth);
-  const [form, setForm] = useState<FormData>(INIT);
+  const [jobType, setJobType] = useState<JobType | null>(null);
+  const [online, setOnline] = useState<OnlineForm>(ONLINE_INIT);
+  const [walkin, setWalkin] = useState<WalkinForm>(WALKIN_INIT);
   const [loading, setLoading] = useState(false);
   const [done, setDone] = useState(false);
 
-  const set = (f: keyof FormData, v: string) => setForm(p => ({ ...p, [f]: v }));
+  const setO = (f: keyof OnlineForm, v: string) => setOnline(p => ({ ...p, [f]: v }));
+  const setW = (f: keyof WalkinForm, v: string) => setWalkin(p => ({ ...p, [f]: v }));
 
-  async function handleSubmit(e: React.FormEvent) {
+  const inputStyle: React.CSSProperties = {
+    fontFamily: "'JetBrains Mono', 'IBM Plex Mono', ui-monospace, monospace",
+  };
+
+  async function submitOnline(e: React.FormEvent) {
     e.preventDefault();
-    if (!form.applyLink.trim()) { showToast("Apply link is required.", "error"); return; }
-    if (!form.role.trim()) { showToast("Role is required.", "error"); return; }
+    if (!online.applyLink.trim()) { showToast("Apply link is required.", "error"); return; }
+    if (!online.role.trim()) { showToast("Role is required.", "error"); return; }
     if (!auth.user || !auth.profile) { showToast("Not logged in.", "error"); return; }
     setLoading(true);
     try {
       await createJob(auth.user.uid, auth.profile.username, {
-        company: form.company.trim(),
-        location: form.location.trim(),
-        applyLink: form.applyLink.trim(),
-        appliedVia: form.appliedVia,
-        appliedViaOther: form.appliedVia === "Others" ? form.appliedViaOther.trim() : "",
-        ctc: form.ctc.trim(),
-        role: form.role.trim(),
-        lastDate: form.lastDate ? new Date(form.lastDate) : null,
-        bond: form.bond.trim(),
-        batch: form.batch.split(",").map(b => b.trim()).filter(Boolean),
+        jobType: "online",
+        company: online.company.trim(),
+        location: online.location.trim(),
+        applyLink: online.applyLink.trim(),
+        appliedVia: online.appliedVia,
+        appliedViaOther: online.appliedVia === "Others" ? online.appliedViaOther.trim() : "",
+        ctc: online.ctc.trim(),
+        role: online.role.trim(),
+        lastDate: online.lastDate ? new Date(online.lastDate) : null,
+        bond: online.bond.trim(),
+        batch: online.batch.split(",").map(b => b.trim()).filter(Boolean),
+        mapLink: "",
+        nearestMetro: "",
+        routeOrder: 0,
       });
       setDone(true);
       showToast("Job added.", "success");
@@ -57,15 +81,46 @@ export default function JobForm() {
     }
   }
 
-  const inputStyle: React.CSSProperties = {
-    fontFamily: "'JetBrains Mono', 'IBM Plex Mono', ui-monospace, monospace",
-  };
+  async function submitWalkin(e: React.FormEvent) {
+    e.preventDefault();
+    if (!walkin.role.trim()) { showToast("Role is required.", "error"); return; }
+    if (!walkin.company.trim()) { showToast("Company is required.", "error"); return; }
+    if (!walkin.location.trim()) { showToast("Location is required.", "error"); return; }
+    if (!auth.user || !auth.profile) { showToast("Not logged in.", "error"); return; }
+    setLoading(true);
+    try {
+      await createJob(auth.user.uid, auth.profile.username, {
+        jobType: "walkin",
+        company: walkin.company.trim(),
+        location: walkin.location.trim(),
+        applyLink: walkin.applyLink.trim(),
+        appliedVia: walkin.appliedVia,
+        appliedViaOther: "",
+        ctc: walkin.ctc.trim(),
+        role: walkin.role.trim(),
+        lastDate: null,
+        bond: walkin.bond.trim(),
+        batch: walkin.batch.split(",").map(b => b.trim()).filter(Boolean),
+        mapLink: walkin.mapLink.trim(),
+        nearestMetro: walkin.nearestMetro.trim(),
+        routeOrder: Date.now(),
+        onRoute: true,
+        status: "pending",
+      });
+      setDone(true);
+      showToast("Walk-in added.", "success");
+      setTimeout(() => { window.location.href = "/walk-in"; }, 900);
+    } catch (err: any) {
+      showToast(err.message ?? "Failed to add.", "error");
+    } finally {
+      setLoading(false);
+    }
+  }
 
   return (
     <>
       <ToastProvider />
 
-      {/* Page header */}
       <div className="page-header">
         <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 4 }}>
           <a href="/" style={{ fontSize: 13, color: "var(--mute)", textDecoration: "none" }}>
@@ -73,173 +128,219 @@ export default function JobForm() {
           </a>
         </div>
         <h1 className="page-title">Add Job Listing</h1>
-        <p className="page-subtitle">Track a new job opportunity.</p>
+        <p className="page-subtitle">
+          {jobType === null
+            ? "Choose how you found this opportunity."
+            : jobType === "online"
+              ? "Track an online application."
+              : "Track a walk-in interview stop."}
+        </p>
       </div>
 
-      <div className="form-card" style={{ maxWidth: 620 }}>
-        <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: 18 }}>
-
-          {/* Role */}
-          <div className="form-group">
-            <label className="form-label">role *</label>
-            <input
-              id="job-role"
-              className="form-input"
-              placeholder="Frontend Developer, SDE Intern…"
-              value={form.role}
-              onChange={e => set("role", e.target.value)}
-              style={inputStyle}
-              required
-            />
-          </div>
-
-          {/* Company + Location */}
-          <div className="two-col">
-            <div className="form-group">
-              <label className="form-label">company</label>
-              <input
-                id="job-company"
-                className="form-input"
-                placeholder="Infosys, Wipro…"
-                value={form.company}
-                onChange={e => set("company", e.target.value)}
-                style={inputStyle}
-              />
+      {/* Type picker */}
+      {jobType === null && (
+        <div
+          className="job-type-picker"
+          style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, maxWidth: 620 }}
+        >
+          <button
+            type="button"
+            onClick={() => setJobType("online")}
+            className="form-card"
+            style={{
+              cursor: "pointer", textAlign: "left", border: "1.5px solid var(--hairline)",
+              background: "var(--canvas)", padding: "22px 20px",
+              fontFamily: "inherit", color: "inherit",
+            }}
+          >
+            <div style={{ fontSize: 22, marginBottom: 8, fontWeight: 700, color: "var(--ink)" }}>Online</div>
+            <div style={{ fontSize: 13, color: "var(--mute)", lineHeight: 1.45 }}>
+              Portal / LinkedIn form — apply link required, last date, platform.
             </div>
-            <div className="form-group">
-              <label className="form-label">location</label>
-              <input
-                id="job-location"
-                className="form-input"
-                placeholder="Remote / Bangalore"
-                value={form.location}
-                onChange={e => set("location", e.target.value)}
-                style={inputStyle}
-              />
+          </button>
+          <button
+            type="button"
+            onClick={() => setJobType("walkin")}
+            className="form-card"
+            style={{
+              cursor: "pointer", textAlign: "left", border: "1.5px solid var(--hairline)",
+              background: "var(--canvas)", padding: "22px 20px",
+              fontFamily: "inherit", color: "inherit",
+            }}
+          >
+            <div style={{ fontSize: 22, marginBottom: 8, fontWeight: 700, color: "var(--ink)" }}>Walk-in</div>
+            <div style={{ fontSize: 13, color: "var(--mute)", lineHeight: 1.45 }}>
+              On-site visit — map, metro, then plan your day’s route order.
             </div>
-          </div>
+          </button>
+          <style>{`
+            @media (max-width: 560px) {
+              .job-type-picker { grid-template-columns: 1fr !important; }
+            }
+          `}</style>
+        </div>
+      )}
 
-          {/* Apply link */}
-          <div className="form-group">
-            <label className="form-label">apply link *</label>
-            <input
-              id="job-apply-link"
-              className="form-input"
-              type="url"
-              placeholder="https://…"
-              value={form.applyLink}
-              onChange={e => set("applyLink", e.target.value)}
-              style={inputStyle}
-              required
-            />
-          </div>
-
-          <div className="two-col">
-            {/* Platform */}
+      {/* Online form */}
+      {jobType === "online" && (
+        <div className="form-card" style={{ maxWidth: 620 }}>
+          <button
+            type="button"
+            onClick={() => setJobType(null)}
+            style={{
+              background: "none", border: "none", padding: 0, marginBottom: 14,
+              fontSize: 12, color: "var(--mute)", cursor: "pointer", fontFamily: "inherit",
+            }}
+          >
+            ← change type
+          </button>
+          <form onSubmit={submitOnline} style={{ display: "flex", flexDirection: "column", gap: 18 }}>
             <div className="form-group">
-              <label className="form-label">applied through</label>
-              <select
-                id="job-applied-via"
-                className="form-select"
-                value={form.appliedVia}
-                onChange={e => set("appliedVia", e.target.value)}
-                style={inputStyle}
-              >
-                {APPLIED_VIA_OPTIONS.map(o => (
-                  <option key={o} value={o}>{o}</option>
-                ))}
-              </select>
+              <label className="form-label">role *</label>
+              <input className="form-input" placeholder="Frontend Developer, SDE Intern…" value={online.role} onChange={e => setO("role", e.target.value)} style={inputStyle} required />
             </div>
 
-            {/* CTC */}
-            <div className="form-group">
-              <label className="form-label">ctc</label>
-              <input
-                id="job-ctc"
-                className="form-input"
-                placeholder="6 LPA, ₹8–10 LPA"
-                value={form.ctc}
-                onChange={e => set("ctc", e.target.value)}
-                style={inputStyle}
-              />
-            </div>
-          </div>
-
-          {form.appliedVia === "Others" && (
-            <div className="form-group">
-              <label className="form-label">platform name</label>
-              <input
-                id="job-platform-other"
-                className="form-input"
-                placeholder="Internshala, Freshersworld…"
-                value={form.appliedViaOther}
-                onChange={e => set("appliedViaOther", e.target.value)}
-                style={inputStyle}
-              />
-            </div>
-          )}
-
-          <div className="two-col">
-            {/* Batch */}
-            <div className="form-group">
-              <label className="form-label">eligible batch</label>
-              <input
-                id="job-batch"
-                className="form-input"
-                placeholder="2025 or 2024,2025"
-                value={form.batch}
-                onChange={e => set("batch", e.target.value)}
-                style={inputStyle}
-              />
-              <span className="form-hint">comma-separated</span>
+            <div className="two-col">
+              <div className="form-group">
+                <label className="form-label">company</label>
+                <input className="form-input" placeholder="Infosys, Wipro…" value={online.company} onChange={e => setO("company", e.target.value)} style={inputStyle} />
+              </div>
+              <div className="form-group">
+                <label className="form-label">location</label>
+                <input className="form-input" placeholder="Remote / Bangalore" value={online.location} onChange={e => setO("location", e.target.value)} style={inputStyle} />
+              </div>
             </div>
 
-            {/* Bond */}
             <div className="form-group">
-              <label className="form-label">bond</label>
-              <input
-                id="job-bond"
-                className="form-input"
-                placeholder="2 Years / No Bond"
-                value={form.bond}
-                onChange={e => set("bond", e.target.value)}
-                style={inputStyle}
-              />
+              <label className="form-label">apply link *</label>
+              <input className="form-input" type="url" placeholder="https://…" value={online.applyLink} onChange={e => setO("applyLink", e.target.value)} style={inputStyle} required />
             </div>
-          </div>
 
-          {/* Last date */}
-          <div className="form-group" style={{ maxWidth: 220 }}>
-            <label className="form-label">last date</label>
-            <input
-              id="job-last-date"
-              className="form-input"
-              type="date"
-              value={form.lastDate}
-              onChange={e => set("lastDate", e.target.value)}
-              style={{ ...inputStyle, colorScheme: "light" }}
-            />
-          </div>
+            <div className="two-col">
+              <div className="form-group">
+                <label className="form-label">applied through</label>
+                <select className="form-select" value={online.appliedVia} onChange={e => setO("appliedVia", e.target.value)} style={inputStyle}>
+                  {ONLINE_VIA.map(o => <option key={o} value={o}>{o}</option>)}
+                </select>
+              </div>
+              <div className="form-group">
+                <label className="form-label">ctc</label>
+                <input className="form-input" placeholder="6 LPA, ₹8–10 LPA" value={online.ctc} onChange={e => setO("ctc", e.target.value)} style={inputStyle} />
+              </div>
+            </div>
 
-          {/* Actions */}
-          <div style={{ display: "flex", gap: 10, paddingTop: 4 }}>
-            <button
-              type="submit"
-              id="job-submit-btn"
-              className="btn btn-primary"
-              disabled={loading || done}
-            >
-              {loading
-                ? <><div className="spinner spinner-dark" style={{ width: 11, height: 11 }} /> Adding…</>
-                : done ? "Added ✓" : "Add Job"
-              }
-            </button>
-            <a href="/" className="btn btn-secondary" style={{ textDecoration: "none" }}>
-              Cancel
-            </a>
-          </div>
-        </form>
-      </div>
+            {online.appliedVia === "Others" && (
+              <div className="form-group">
+                <label className="form-label">platform name</label>
+                <input className="form-input" placeholder="Internshala, Freshersworld…" value={online.appliedViaOther} onChange={e => setO("appliedViaOther", e.target.value)} style={inputStyle} />
+              </div>
+            )}
+
+            <div className="two-col">
+              <div className="form-group">
+                <label className="form-label">eligible batch</label>
+                <input className="form-input" placeholder="2025 or 2024,2025" value={online.batch} onChange={e => setO("batch", e.target.value)} style={inputStyle} />
+                <span className="form-hint">comma-separated</span>
+              </div>
+              <div className="form-group">
+                <label className="form-label">bond</label>
+                <input className="form-input" placeholder="2 Years / No Bond" value={online.bond} onChange={e => setO("bond", e.target.value)} style={inputStyle} />
+              </div>
+            </div>
+
+            <div className="form-group" style={{ maxWidth: 220 }}>
+              <label className="form-label">last date</label>
+              <input className="form-input" type="date" value={online.lastDate} onChange={e => setO("lastDate", e.target.value)} style={{ ...inputStyle, colorScheme: "light" }} />
+            </div>
+
+            <div style={{ display: "flex", gap: 10, paddingTop: 4 }}>
+              <button type="submit" className="btn btn-primary" disabled={loading || done}>
+                {loading ? <><div className="spinner spinner-dark" style={{ width: 11, height: 11 }} /> Adding…</> : done ? "Added ✓" : "Add Job"}
+              </button>
+              <a href="/" className="btn btn-secondary" style={{ textDecoration: "none" }}>Cancel</a>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* Walk-in form */}
+      {jobType === "walkin" && (
+        <div className="form-card" style={{ maxWidth: 620 }}>
+          <button
+            type="button"
+            onClick={() => setJobType(null)}
+            style={{
+              background: "none", border: "none", padding: 0, marginBottom: 14,
+              fontSize: 12, color: "var(--mute)", cursor: "pointer", fontFamily: "inherit",
+            }}
+          >
+            ← change type
+          </button>
+          <form onSubmit={submitWalkin} style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+            <div className="form-group">
+              <label className="form-label">role *</label>
+              <input className="form-input" placeholder="Frontend Developer, SDE Intern…" value={walkin.role} onChange={e => setW("role", e.target.value)} style={inputStyle} required />
+            </div>
+
+            <div className="two-col">
+              <div className="form-group">
+                <label className="form-label">company *</label>
+                <input className="form-input" placeholder="Infosys, Wipro…" value={walkin.company} onChange={e => setW("company", e.target.value)} style={inputStyle} required />
+              </div>
+              <div className="form-group">
+                <label className="form-label">location *</label>
+                <input className="form-input" placeholder="Noida Sector 62" value={walkin.location} onChange={e => setW("location", e.target.value)} style={inputStyle} required />
+              </div>
+            </div>
+
+            <div className="form-group">
+              <label className="form-label">location map link</label>
+              <input className="form-input" type="url" placeholder="https://maps.google.com/…" value={walkin.mapLink} onChange={e => setW("mapLink", e.target.value)} style={inputStyle} />
+            </div>
+
+            <div className="form-group">
+              <label className="form-label">nearest metro</label>
+              <input className="form-input" placeholder="Sector 62 / Blue Line" value={walkin.nearestMetro} onChange={e => setW("nearestMetro", e.target.value)} style={inputStyle} />
+            </div>
+
+            <div className="form-group">
+              <label className="form-label">apply link <span style={{ color: "var(--mute)", fontWeight: 500 }}>(optional)</span></label>
+              <input className="form-input" type="url" placeholder="https://…" value={walkin.applyLink} onChange={e => setW("applyLink", e.target.value)} style={inputStyle} />
+            </div>
+
+            <div className="two-col">
+              <div className="form-group">
+                <label className="form-label">applied through</label>
+                <select className="form-select" value={walkin.appliedVia} onChange={e => setW("appliedVia", e.target.value)} style={inputStyle}>
+                  {WALKIN_VIA.map(o => <option key={o} value={o}>{o}</option>)}
+                </select>
+              </div>
+              <div className="form-group">
+                <label className="form-label">ctc <span style={{ color: "var(--mute)", fontWeight: 500 }}>(if available)</span></label>
+                <input className="form-input" placeholder="6 LPA, ₹8–10 LPA" value={walkin.ctc} onChange={e => setW("ctc", e.target.value)} style={inputStyle} />
+              </div>
+            </div>
+
+            <div className="two-col">
+              <div className="form-group">
+                <label className="form-label">eligible batch <span style={{ color: "var(--mute)", fontWeight: 500 }}>(optional)</span></label>
+                <input className="form-input" placeholder="2025 or 2024,2025" value={walkin.batch} onChange={e => setW("batch", e.target.value)} style={inputStyle} />
+              </div>
+              <div className="form-group">
+                <label className="form-label">bond <span style={{ color: "var(--mute)", fontWeight: 500 }}>(optional)</span></label>
+                <input className="form-input" placeholder="2 Years / No Bond" value={walkin.bond} onChange={e => setW("bond", e.target.value)} style={inputStyle} />
+              </div>
+            </div>
+
+            <div style={{ display: "flex", gap: 10, paddingTop: 4 }}>
+              <button type="submit" className="btn btn-primary" disabled={loading || done}>
+                {loading ? <><div className="spinner spinner-dark" style={{ width: 11, height: 11 }} /> Saving…</> : done ? "Saved ✓" : "Save"}
+              </button>
+              <a href="/walk-in" className="btn btn-secondary" style={{ textDecoration: "none" }}>Cancel</a>
+            </div>
+          </form>
+        </div>
+      )}
     </>
   );
 }

@@ -4,6 +4,7 @@ import { $auth } from "../../stores/authStore";
 import { getConnectedUIDs, getUsersByUIDs, getPermission, setPermission } from "../../lib/firestore";
 import type { UserProfile } from "../../lib/firestore";
 import { ToastProvider, showToast } from "../ui/Toast";
+import ShimmerSkeleton from "../ui/ShimmerSkeleton";
 
 export default function PermissionsView() {
   const auth = useStore($auth);
@@ -44,11 +45,7 @@ export default function PermissionsView() {
   }
 
   if (loading) {
-    return (
-      <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "40px 0", color: "var(--mute)", fontSize: 13 }}>
-        <div className="spinner" /> Loading…
-      </div>
-    );
+    return <ShimmerSkeleton variant="list" count={4} />;
   }
 
   return (

@@ -899,22 +899,84 @@ body {
 
 /* ── Shimmer Loading Effect ── */
 @keyframes shimmer {
-  0% { background-position: -1000px 0; }
-  100% { background-position: 1000px 0; }
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+@keyframes route-progress {
+  0% { transform: scaleX(0); transform-origin: left; opacity: 1; }
+  40% { transform: scaleX(0.55); transform-origin: left; }
+  100% { transform: scaleX(1); transform-origin: left; opacity: 0.85; }
+}
+
+.shimmer,
+.shimmer-bg {
+  background: linear-gradient(
+    90deg,
+    var(--surface-card) 0%,
+    #e8e4e4 35%,
+    var(--surface-soft) 50%,
+    #e8e4e4 65%,
+    var(--surface-card) 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.35s ease-in-out infinite;
+  border-radius: 4px;
 }
 
 .shimmer {
-  animation: shimmer 2s infinite linear;
-  background: linear-gradient(to right, var(--hairline) 4%, var(--mute) 25%, var(--hairline) 36%);
-  background-size: 1000px 100%;
   color: transparent !important;
-  opacity: 0.5;
+  pointer-events: none;
+  user-select: none;
 }
 
-.shimmer-bg {
-  animation: shimmer 2s infinite linear;
-  background: linear-gradient(to right, var(--hairline) 4%, var(--mute) 25%, var(--hairline) 36%);
-  background-size: 1000px 100%;
+.shimmer-card {
+  border: 1.5px solid var(--hairline);
+  border-radius: 10px;
+  padding: 20px;
+  background: var(--canvas);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.shimmer-line {
+  height: 12px;
+  border-radius: 4px;
+}
+
+.shimmer-chip {
+  height: 22px;
+  width: 72px;
+  border-radius: 4px;
+}
+
+/* Client-side nav progress (top edge) */
+.nav-progress {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  z-index: 10050;
+  pointer-events: none;
+  background: transparent;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.nav-progress.is-active {
+  opacity: 1;
+}
+
+.nav-progress.is-active::after {
+  content: "";
+  display: block;
+  height: 100%;
+  width: 100%;
+  background: linear-gradient(90deg, #c0392b, #e87461, #c0392b);
+  background-size: 200% 100%;
+  animation: route-progress 0.7s ease-out forwards, shimmer 1s linear infinite;
 }
 
 /* Hide extra view toggles on tablet */

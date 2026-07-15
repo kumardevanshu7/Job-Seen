@@ -26,9 +26,21 @@ export interface UserProfile {
   email: string;
   photoURL?: string;
   createdAt: any;
+  deletePinHash?: string;
 }
 
-export type JobStatus = 'pending' | 'applied' | 'in_progress' | 'no_response' | 'rejected' | 'selected';
+export type JobType = 'online' | 'walkin';
+
+export type JobStatus =
+  | 'pending'
+  | 'applied'
+  | 'in_progress'
+  | 'no_response'
+  | 'rejected'
+  | 'selected'
+  | 'interview_done'
+  | 'fraud'
+  | 'cancelled';
 
 export interface JobCard {
   id: string;
@@ -51,6 +63,13 @@ export interface JobCard {
   status?: JobStatus;
   appliedAt?: any;       // when user clicked "Applied"
   reminderDismissedAt?: any; // when user dismissed the 3-day reminder
+  cancelReason?: string;
+  // Online vs Walk-in
+  jobType?: JobType;     // default: online for legacy docs
+  mapLink?: string;
+  nearestMetro?: string;
+  routeOrder?: number;   // custom visit order for walk-ins / routed online
+  onRoute?: boolean;     // optional: include online job on Walk-in Route
 }
 
 export interface Connection {
@@ -171,12 +190,56 @@ export async function deleteJob(jobId: string): Promise<void> {
 export async function updateJobStatus(
   jobId: string,
   status: JobStatus,
-  extra?: { appliedAt?: any; reminderDismissedAt?: any }
+  extra?: { appliedAt?: any; reminderDismissedAt?: any; cancelReason?: string }
 ): Promise<void> {
   const updates: any = { status };
   if (extra?.appliedAt !== undefined) updates.appliedAt = extra.appliedAt;
   if (extra?.reminderDismissedAt !== undefined) updates.reminderDismissedAt = extra.reminderDismissedAt;
+  if (extra?.cancelReason !== undefined) updates.cancelReason = extra.cancelReason;
   await updateDoc(doc(db, "jobs", jobId), updates);
+}
+
+export async function updateJobRouteOrder(
+  updates: { id: string; routeOrder: number }[]
+): Promise<void> {
+  await Promise.all(
+    updates.map(({ id, routeOrder }) =>
+      updateDoc(doc(db, "jobs", id), { routeOrder })
+    )
+  );
+}
+
+export async function setJobOnRoute(
+  jobId: string,
+  onRoute: boolean,
+  routeOrder?: number
+): Promise<void> {
+  const updates: any = { onRoute };
+  if (onRoute) updates.routeOrder = routeOrder ?? Date.now();
+  await updateDoc(doc(db, "jobs", jobId), updates);
+}
+
+export async function hashDeletePin(pin: string): Promise<string> {
+  const data = new TextEncoder().encode(`jobseen-pin:${pin}`);
+  const buf = await crypto.subtle.digest("SHA-256", data);
+  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, "0")).join("");
+}
+
+export async function setUserDeletePin(uid: string, pin: string): Promise<string> {
+  const deletePinHash = await hashDeletePin(pin);
+  await updateDoc(doc(db, "users", uid), { deletePinHash });
+  return deletePinHash;
+}
+
+export async function verifyUserDeletePin(uid: string, pin: string, storedHash?: string): Promise<boolean> {
+  let hash = storedHash;
+  if (!hash) {
+    const snap = await getDoc(doc(db, "users", uid));
+    hash = snap.exists() ? (snap.data().deletePinHash as string | undefined) : undefined;
+  }
+  if (!hash) return false;
+  const attempt = await hashDeletePin(pin);
+  return attempt === hash;
 }
 
 

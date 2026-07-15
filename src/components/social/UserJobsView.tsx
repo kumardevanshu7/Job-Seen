@@ -5,6 +5,7 @@ import { searchUserByUsername, getJobsByUID, getConnectedUIDs } from "../../lib/
 import type { JobCard as JobCardType, UserProfile } from "../../lib/firestore";
 import JobCard from "../jobs/JobCard";
 import { ToastProvider } from "../ui/Toast";
+import ShimmerSkeleton from "../ui/ShimmerSkeleton";
 
 interface Props { username: string; }
 
@@ -51,10 +52,7 @@ export default function UserJobsView({ username }: Props) {
       </a>
 
       {loading ? (
-        <div style={{ padding: "48px 0", display: "flex", alignItems: "center", gap: 12 }}>
-          <div className="spinner" />
-          <span style={{ fontSize: 16, color: "var(--mute)" }}>loading...</span>
-        </div>
+        <ShimmerSkeleton variant="jobs" count={3} />
       ) : error ? (
         <div className="empty-state">
           <div className="empty-state-marker" style={{ color: "var(--danger)" }}>[-] error</div>

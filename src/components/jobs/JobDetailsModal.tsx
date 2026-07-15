@@ -9,12 +9,15 @@ interface Props {
 }
 
 const STATUS_CONFIG: Record<JobStatus, { label: string; color: string; bg: string; border: string }> = {
-  pending:     { label: "Not Applied",       color: "#c0392b", bg: "#fff5f5", border: "#f5c6c6" },
-  applied:     { label: "Applied ✓",         color: "#1a7a3c", bg: "#f0faf4", border: "#b7eb8f" },
-  in_progress: { label: "Pending ⏳",        color: "#b45309", bg: "#fffbeb", border: "#fde68a" },
-  no_response: { label: "No Response Yet",   color: "#7c3aed", bg: "#faf5ff", border: "#d8b4fe" },
-  rejected:    { label: "Rejected",          color: "#6b7280", bg: "#f9fafb", border: "#d1d5db" },
-  selected:    { label: "🎉 Selected!",      color: "#92400e", bg: "#fef3c7", border: "#fcd34d" },
+  pending:         { label: "Not Applied",       color: "#c0392b", bg: "#fff5f5", border: "#f5c6c6" },
+  applied:         { label: "Applied ✓",         color: "#1a7a3c", bg: "#f0faf4", border: "#b7eb8f" },
+  in_progress:     { label: "Pending ⏳",        color: "#b45309", bg: "#fffbeb", border: "#fde68a" },
+  no_response:     { label: "No Response Yet",   color: "#7c3aed", bg: "#faf5ff", border: "#d8b4fe" },
+  rejected:        { label: "Rejected",          color: "#6b7280", bg: "#f9fafb", border: "#d1d5db" },
+  selected:        { label: "🎉 Selected!",      color: "#92400e", bg: "#fef3c7", border: "#fcd34d" },
+  interview_done:  { label: "Interview done",    color: "#1a7a3c", bg: "#f0faf4", border: "#b7eb8f" },
+  fraud:           { label: "Fraud",             color: "#9b1c1c", bg: "#fef2f2", border: "#fecaca" },
+  cancelled:       { label: "Cancelled",         color: "#78716c", bg: "#fafaf9", border: "#d6d3d1" },
 };
 
 function formatDetailedDate(d: any): string {

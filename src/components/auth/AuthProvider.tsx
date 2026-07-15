@@ -6,6 +6,7 @@ import { setNotifications } from "../../stores/notificationStore";
 import { setUnreadChatCount } from "../../stores/chatStore";
 import type { UserProfile } from "../../lib/firestore";
 import UsernameSetup from "./UsernameSetup";
+import ShimmerSkeleton from "../ui/ShimmerSkeleton";
 
 interface Props {
   children: React.ReactNode;
@@ -13,7 +14,13 @@ interface Props {
 }
 
 export default function AuthProvider({ children, requireAdmin = false }: Props) {
-  const [state, setState] = useState({ loading: true, needsUsername: false, notAdmin: false });
+  const cached = $auth.get();
+  const [state, setState] = useState({
+    // Client-side nav remounts this island — reuse store so spinner na dikhe
+    loading: !(cached.initialized && cached.user && cached.profile),
+    needsUsername: false,
+    notAdmin: false,
+  });
 
   useEffect(() => {
     const unsub = onAuthChanged(async (user) => {
@@ -37,13 +44,11 @@ export default function AuthProvider({ children, requireAdmin = false }: Props) 
         return;
       }
 
-      setAuthState({ user, profile, loading: false, initialized: true });
+      setAuthState({ user, profile: { ...profile, uid: user.uid } as UserProfile, loading: false, initialized: true });
       setState({ loading: false, needsUsername: false, notAdmin: false });
 
-      // Subscribe to notifications
       const unsubNotif = subscribeToNotifications(user.uid, setNotifications);
-      
-      // Subscribe to chat messages
+
       let unsubsChat: (() => void)[] = [];
       getConnectedUIDs(user.uid).then(uids => {
         unsubsChat = subscribeToUnreadChatCount(user.uid, uids, setUnreadChatCount);
@@ -56,14 +61,10 @@ export default function AuthProvider({ children, requireAdmin = false }: Props) 
     });
 
     return () => unsub();
-  }, []);
+  }, [requireAdmin]);
 
   if (state.loading) {
-    return (
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: "100vh" }}>
-        <div className="spinner" style={{ width: 36, height: 36 }} />
-      </div>
-    );
+    return <ShimmerSkeleton variant="auth" />;
   }
 
   if (state.notAdmin) {

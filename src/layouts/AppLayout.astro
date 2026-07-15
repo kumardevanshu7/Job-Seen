@@ -1,5 +1,6 @@
 ---
 import "../styles/global.css";
+import { ClientRouter } from "astro:transitions";
 import Sidebar from "../components/layout/Sidebar";
 import AuthProvider from "../components/auth/AuthProvider";
 
@@ -20,12 +21,15 @@ const { title = "JobSeen", requireAdmin = false } = Astro.props;
     <link rel="icon" type="image/png" href="/icons/icon-192.png" />
     <meta name="theme-color" content="#fdfcfc" />
     <title>{title} – JobSeen</title>
+    <ClientRouter />
   </head>
   <body>
     <AuthProvider requireAdmin={requireAdmin} client:only="react">
       <div class="page-wrapper">
-        <Sidebar client:only="react" />
-        <main class="main-content">
+        <div transition:persist="sidebar">
+          <Sidebar client:only="react" />
+        </div>
+        <main class="main-content" transition:animate="fade">
           <div class="main-inner">
             <slot />
           </div>
@@ -33,12 +37,25 @@ const { title = "JobSeen", requireAdmin = false } = Astro.props;
       </div>
     </AuthProvider>
     <div id="toast-root"></div>
+    <div id="nav-progress" class="nav-progress" aria-hidden="true"></div>
     <script>
       if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
           navigator.serviceWorker.register('/sw.js').catch(() => {});
         });
       }
+
+      // Soft nav shimmer bar (ClientRouter)
+      const bar = () => document.getElementById('nav-progress');
+      document.addEventListener('astro:before-preparation', () => {
+        bar()?.classList.add('is-active');
+      });
+      document.addEventListener('astro:page-load', () => {
+        const el = bar();
+        if (!el) return;
+        // brief finish then hide
+        window.setTimeout(() => el.classList.remove('is-active'), 180);
+      });
     </script>
   </body>
 </html>

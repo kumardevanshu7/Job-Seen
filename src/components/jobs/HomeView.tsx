@@ -1,12 +1,13 @@
 import { useEffect, useState } from "react";
 import { useStore } from "@nanostores/react";
-import { $auth } from "../../stores/authStore";
-import { subscribeToUserJobs, deleteJob, updateJobStatus } from "../../lib/firestore";
+import { $auth, setAuthState } from "../../stores/authStore";
+import { subscribeToUserJobs, deleteJob, updateJobStatus, setUserDeletePin, verifyUserDeletePin } from "../../lib/firestore";
 import type { JobCard as JobCardType, JobStatus } from "../../lib/firestore";
 import JobCard from "./JobCard";
 import { ToastProvider, showToast } from "../ui/Toast";
-import ConfirmModal from "../ui/ConfirmModal";
+import DeletePinModal from "../ui/DeletePinModal";
 import JobDetailsModal from "./JobDetailsModal";
+import ShimmerSkeleton from "../ui/ShimmerSkeleton";
 
 export default function HomeView() {
   const auth = useStore($auth);
@@ -16,6 +17,8 @@ export default function HomeView() {
   const [selectedJob, setSelectedJob] = useState<JobCardType | null>(null);
   const [viewMode, setViewMode] = useState<string>("list");
   const [filterTab, setFilterTab] = useState<"all"|"mine"|"copied">("all");
+
+  const hasDeletePin = !!auth.profile?.deletePinHash;
 
   useEffect(() => {
     const saved = localStorage.getItem("jobseen_view_mode");
@@ -48,19 +51,23 @@ export default function HomeView() {
   }, [auth.user]);
 
   function handleDelete(id: string) {
-    setDeleteTarget(id);    // open custom modal instead of confirm()
+    setDeleteTarget(id);
   }
 
-  async function confirmDelete() {
-    if (!deleteTarget) return;
-    try {
-      await deleteJob(deleteTarget);
-      showToast("Job removed.", "info");
-    } catch {
-      showToast("Failed to remove.", "error");
-    } finally {
-      setDeleteTarget(null);
+  async function confirmDeleteWithPin(pin: string) {
+    if (!deleteTarget || !auth.user) return;
+    if (!hasDeletePin) {
+      const hash = await setUserDeletePin(auth.user.uid, pin);
+      setAuthState({
+        profile: auth.profile ? { ...auth.profile, deletePinHash: hash } : auth.profile,
+      });
+    } else {
+      const ok = await verifyUserDeletePin(auth.user.uid, pin, auth.profile?.deletePinHash);
+      if (!ok) throw new Error("Galat code. Dobara try karo.");
     }
+    await deleteJob(deleteTarget);
+    showToast("Job removed.", "info");
+    setDeleteTarget(null);
   }
 
   // Group by date added (today, yesterday, earlier)
@@ -77,6 +84,8 @@ export default function HomeView() {
   }
 
   const filteredJobs = jobs.filter(j => {
+    // Walk-ins live on /walk-in route planner, not inbox
+    if ((j.jobType ?? "online") === "walkin") return false;
     if (filterTab === "mine") return !j.copiedFromUID;
     if (filterTab === "copied") return !!j.copiedFromUID;
     return true;
@@ -94,16 +103,13 @@ export default function HomeView() {
     <>
       <ToastProvider />
 
-      {/* Custom delete confirmation modal */}
+      {/* Delete with secret PIN */}
       {deleteTarget && (
-        <ConfirmModal
-          title="Delete Job Listing?"
-          message="Ye card hamesha ke liye delete ho jayega. Wapas nahi aayega."
-          confirmLabel="Haan, Delete Karo"
-          cancelLabel="Cancel"
-          danger={true}
-          onConfirm={confirmDelete}
+        <DeletePinModal
+          mode={hasDeletePin ? "verify" : "setup"}
+          confirmLabel={hasDeletePin ? "Delete" : "Set & Delete"}
           onCancel={() => setDeleteTarget(null)}
+          onConfirm={confirmDeleteWithPin}
         />
       )}
 
@@ -191,26 +197,7 @@ export default function HomeView() {
       )}
 
       {loading ? (
-        <div>
-          <div style={{ fontSize: 12, fontWeight: 600, color: "var(--mute)", paddingBottom: 6, letterSpacing: "0.02em" }}>Loading...</div>
-          <div className={`job-list ${viewMode !== "list" ? `job-list-grid ${viewMode}` : ""}`}>
-            {[1, 2, 3, 4].map(i => (
-              <div key={i} style={{ border: "1px solid var(--hairline)", borderRadius: 8, padding: 16, display: "flex", flexDirection: "column", gap: 12 }}>
-                <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
-                  <div className="shimmer-bg" style={{ width: 40, height: 40, borderRadius: 6 }} />
-                  <div style={{ flex: 1 }}>
-                    <div className="shimmer-bg" style={{ height: 16, width: "70%", borderRadius: 4, marginBottom: 8 }} />
-                    <div className="shimmer-bg" style={{ height: 12, width: "40%", borderRadius: 4 }} />
-                  </div>
-                </div>
-                <div style={{ display: "flex", gap: 8, marginTop: "auto" }}>
-                  <div className="shimmer-bg" style={{ height: 28, width: 80, borderRadius: 4 }} />
-                  <div className="shimmer-bg" style={{ height: 28, width: 80, borderRadius: 4 }} />
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
+        <ShimmerSkeleton variant="jobs" count={4} />
       ) : filteredJobs.length === 0 ? (
         <div className="empty-state">
           <div className="empty-state-title">No jobs found</div>
