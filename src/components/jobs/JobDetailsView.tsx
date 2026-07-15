@@ -69,38 +69,145 @@ function ppoLabel(p?: string) {
   return "—";
 }
 
-function buildShareText(job: JobCardType): string {
-  const lines = [
-    "JobSeen — Job Details",
-    "=====================",
-    "",
-    `Company: ${job.company || "—"}`,
-    `Role: ${job.role || "—"}`,
-    `Type: ${employmentLabel(job.employmentType)}`,
-    `Location: ${job.location || "—"}`,
-    `CTC / Stipend: ${job.ctc || "—"}`,
-    `Source: ${job.appliedVia === "Others" ? (job.appliedViaOther || "Others") : (job.appliedVia || "—")}`,
-    `Apply link: ${job.applyLink || "—"}`,
-    `Batch: ${Array.isArray(job.batch) && job.batch.length ? job.batch.join(", ") : "—"}`,
-    `Bond: ${job.bond || "—"}`,
-    `Last date: ${formatDay(job.lastDate)}`,
-    `Status: ${STATUS_CONFIG[job.status ?? "pending"]?.label ?? job.status ?? "—"}`,
-    `Added on: ${formatLong(job.createdAt)}`,
-    `Applied on: ${job.appliedAt ? formatLong(job.appliedAt) : "Not applied yet"}`,
-    `Added by: @${job.ownerUsername || "—"}`,
-  ];
+function esc(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function rowHtml(label: string, value: string, href?: string) {
+  const body = href
+    ? `<a href="${esc(href)}" target="_blank" rel="noopener noreferrer">${esc(value)}</a>`
+    : esc(value);
+  return `
+    <div class="row">
+      <div class="label">${esc(label)}</div>
+      <div class="value">${body}</div>
+    </div>`;
+}
+
+function buildShareHtml(job: JobCardType): string {
+  const status = STATUS_CONFIG[job.status ?? "pending"] ?? STATUS_CONFIG.pending;
+  const source = job.appliedVia === "Others"
+    ? (job.appliedViaOther || "Others")
+    : (job.appliedVia || "—");
+  const batch = Array.isArray(job.batch) && job.batch.length ? job.batch.join(", ") : "—";
+  const title = `${job.company || "Company"} — ${job.role || "Role"}`;
+
+  let extra = "";
   if (job.employmentType === "internship") {
-    lines.push(`Internship duration: ${job.internshipMonths ? `${job.internshipMonths} months` : "—"}`);
-    lines.push(`PPO: ${ppoLabel(job.ppo)}`);
+    extra += rowHtml("Internship duration", job.internshipMonths ? `${job.internshipMonths} months` : "—");
+    extra += rowHtml("PPO", ppoLabel(job.ppo));
   }
-  if (job.jobType === "walkin") {
-    lines.push(`Nearest metro: ${job.nearestMetro || "—"}`);
-    lines.push(`Map link: ${job.mapLink || "—"}`);
+  if (job.jobType === "walkin" || job.nearestMetro || job.mapLink) {
+    extra += rowHtml("Nearest metro", job.nearestMetro || "—");
+    if (job.mapLink) extra += rowHtml("Map link", job.mapLink, job.mapLink);
   }
-  if (job.cancelReason) lines.push(`Cancel reason: ${job.cancelReason}`);
-  if (job.copiedFromUsername) lines.push(`Copied from: @${job.copiedFromUsername}`);
-  lines.push("", "— shared via JobSeen");
-  return lines.join("\n");
+  if (job.cancelReason) extra += rowHtml("Cancel reason", job.cancelReason);
+  if (job.copiedFromUsername) extra += rowHtml("Copied from", `@${job.copiedFromUsername}`);
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>${esc(title)} · JobSeen</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: "JetBrains Mono", "IBM Plex Mono", ui-monospace, Consolas, monospace;
+      background: #f1eeee;
+      color: #423e3e;
+      padding: 28px 16px;
+      line-height: 1.45;
+    }
+    .wrap { max-width: 560px; margin: 0 auto; }
+    .brand {
+      font-size: 11px; font-weight: 700; letter-spacing: 0.12em;
+      color: #8a8585; margin-bottom: 12px; text-transform: uppercase;
+    }
+    .card {
+      background: #fdfcfc;
+      border: 1.5px solid #e2dede;
+      border-radius: 12px;
+      padding: 22px 20px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.06);
+    }
+    .top { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 12px; }
+    .company {
+      background: #201d1d; color: #fdfcfc;
+      font-size: 11px; font-weight: 700; letter-spacing: 0.06em;
+      text-transform: uppercase; padding: 4px 9px; border-radius: 4px;
+    }
+    .status {
+      font-size: 11px; font-weight: 700;
+      color: ${status.color}; background: ${status.bg};
+      border: 1px solid ${status.border};
+      padding: 3px 10px; border-radius: 999px;
+    }
+    h1 {
+      font-size: 22px; font-weight: 700; color: #201d1d;
+      margin-bottom: 18px; line-height: 1.3;
+    }
+    .grid { display: grid; gap: 10px; }
+    .row {
+      border: 1.5px solid #e8e4e4; border-radius: 8px;
+      padding: 12px 14px; background: #fdfcfc;
+    }
+    .label {
+      font-size: 10px; font-weight: 700; color: #8a8585;
+      letter-spacing: 0.06em; text-transform: uppercase; margin-bottom: 5px;
+    }
+    .value { font-size: 13px; font-weight: 600; color: #201d1d; word-break: break-word; }
+    a {
+      color: #1d4ed8; font-weight: 700; text-decoration: underline;
+      text-underline-offset: 2px;
+    }
+    a:hover { color: #c0392b; }
+    .cta {
+      display: inline-block; margin-top: 16px;
+      background: #201d1d; color: #fdfcfc !important;
+      text-decoration: none !important;
+      font-size: 13px; font-weight: 700;
+      padding: 11px 16px; border-radius: 6px;
+    }
+    .cta:hover { background: #302c2c; color: #fdfcfc !important; }
+    .foot {
+      margin-top: 16px; font-size: 11px; color: #8a8585; text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="brand">JobSeen share card</div>
+    <div class="card">
+      <div class="top">
+        <span class="company">${esc(job.company || "Company")}</span>
+        <span class="status">${esc(status.label)}</span>
+      </div>
+      <h1>${esc(job.role || "Job Role")}</h1>
+      <div class="grid">
+        ${rowHtml("Role type", employmentLabel(job.employmentType))}
+        ${rowHtml("Location", job.location || "—")}
+        ${rowHtml("CTC / Stipend", job.ctc || "—")}
+        ${rowHtml("Source", source)}
+        ${rowHtml("Eligible batch", batch)}
+        ${rowHtml("Bond", job.bond || "—")}
+        ${rowHtml("Last date", formatDay(job.lastDate))}
+        ${rowHtml("Added on", formatLong(job.createdAt))}
+        ${rowHtml("Applied on", job.appliedAt ? formatLong(job.appliedAt) : "Not applied yet")}
+        ${rowHtml("Added by", `@${job.ownerUsername || "—"}`)}
+        ${extra}
+        ${job.applyLink ? rowHtml("Apply link", job.applyLink, job.applyLink) : rowHtml("Apply link", "—")}
+      </div>
+      ${job.applyLink ? `<a class="cta" href="${esc(job.applyLink)}" target="_blank" rel="noopener noreferrer">Open Apply Link ↗</a>` : ""}
+    </div>
+    <div class="foot">Shared via JobSeen · open this HTML file in any browser</div>
+  </div>
+</body>
+</html>`;
 }
 
 function DetailRow({ label, value, href }: { label: string; value: React.ReactNode; href?: string }) {
@@ -197,18 +304,18 @@ export default function JobDetailsView() {
 
   function downloadDetails() {
     if (!job) return;
-    const text = buildShareText(job);
-    const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
+    const html = buildShareHtml(job);
+    const blob = new Blob([html], { type: "text/html;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     const safe = (job.company || job.role || "job").replace(/[^\w\-]+/g, "_").slice(0, 40);
     a.href = url;
-    a.download = `JobSeen_${safe}.txt`;
+    a.download = `JobSeen_${safe}.html`;
     document.body.appendChild(a);
     a.click();
     a.remove();
     URL.revokeObjectURL(url);
-    showToast("Details downloaded — dost ko share kar sakte ho.", "success");
+    showToast("HTML card downloaded — dost ko bhejo, browser me open hoga.", "success");
   }
 
   async function confirmDeleteWithPin(pin: string) {
