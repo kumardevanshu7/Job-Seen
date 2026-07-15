@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useStore } from "@nanostores/react";
 import { $auth, setAuthState } from "../../stores/authStore";
 import { subscribeToUserJobs, deleteJob, updateJobStatus, setUserDeletePin, verifyUserDeletePin } from "../../lib/firestore";
@@ -6,17 +6,37 @@ import type { JobCard as JobCardType, JobStatus } from "../../lib/firestore";
 import JobCard from "./JobCard";
 import { ToastProvider, showToast } from "../ui/Toast";
 import DeletePinModal from "../ui/DeletePinModal";
-import JobDetailsModal from "./JobDetailsModal";
 import ShimmerSkeleton from "../ui/ShimmerSkeleton";
+
+function toDate(d: any): Date | null {
+  if (!d) return null;
+  if (d.toDate) return d.toDate();
+  const parsed = new Date(d);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function dayKey(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+function formatDayLabel(key: string): string {
+  const [y, m, d] = key.split("-").map(Number);
+  const date = new Date(y, m - 1, d);
+  return date.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
+}
 
 export default function HomeView() {
   const auth = useStore($auth);
   const [jobs, setJobs] = useState<JobCardType[]>([]);
   const [loading, setLoading] = useState(true);
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
-  const [selectedJob, setSelectedJob] = useState<JobCardType | null>(null);
   const [viewMode, setViewMode] = useState<string>("list");
-  const [filterTab, setFilterTab] = useState<"all"|"mine"|"copied">("all");
+  const [filterTab, setFilterTab] = useState<"all" | "mine" | "copied">("all");
+  const [dateBasis, setDateBasis] = useState<"added" | "applied">("added");
+  const [dateFilter, setDateFilter] = useState<string>("all");
 
   const hasDeletePin = !!auth.profile?.deletePinHash;
 
@@ -26,13 +46,12 @@ export default function HomeView() {
   }, []);
 
   useEffect(() => {
-    // Adjust container width based on view mode to utilize space better
-    const mainInner = document.querySelector('.main-inner') as HTMLElement;
+    const mainInner = document.querySelector(".main-inner") as HTMLElement;
     if (mainInner) {
-      if (viewMode === 'list') mainInner.style.maxWidth = '760px';
-      else if (viewMode === 'board') mainInner.style.maxWidth = '100%';
-      else if (viewMode === 'cols-2') mainInner.style.maxWidth = '900px';
-      else mainInner.style.maxWidth = '1200px';
+      if (viewMode === "list") mainInner.style.maxWidth = "760px";
+      else if (viewMode === "board") mainInner.style.maxWidth = "100%";
+      else if (viewMode === "cols-2") mainInner.style.maxWidth = "900px";
+      else mainInner.style.maxWidth = "1200px";
     }
   }, [viewMode]);
 
@@ -54,6 +73,10 @@ export default function HomeView() {
     setDeleteTarget(id);
   }
 
+  function openJob(job: JobCardType) {
+    window.location.href = `/jobs/${job.id}`;
+  }
+
   async function confirmDeleteWithPin(pin: string) {
     if (!deleteTarget || !auth.user) return;
     if (!hasDeletePin) {
@@ -70,24 +93,43 @@ export default function HomeView() {
     setDeleteTarget(null);
   }
 
-  // Group by date added (today, yesterday, earlier)
-  const today = new Date(); today.setHours(0,0,0,0);
+  const today = new Date(); today.setHours(0, 0, 0, 0);
   const yesterday = new Date(today); yesterday.setDate(yesterday.getDate() - 1);
 
-  function groupLabel(job: JobCardType): string {
-    if (!job.createdAt) return "Earlier";
-    const d = job.createdAt.toDate ? job.createdAt.toDate() : new Date(job.createdAt);
-    d.setHours(0,0,0,0);
-    if (d.getTime() === today.getTime()) return "Today";
-    if (d.getTime() === yesterday.getTime()) return "Yesterday";
-    return "Earlier";
+  function jobDate(job: JobCardType): Date | null {
+    if (dateBasis === "applied") return toDate(job.appliedAt);
+    return toDate(job.createdAt);
   }
 
+  function groupLabel(job: JobCardType): string {
+    const d = jobDate(job);
+    if (!d) return dateBasis === "applied" ? "Not applied yet" : "Earlier";
+    const x = new Date(d); x.setHours(0, 0, 0, 0);
+    if (dateFilter !== "all") return formatDayLabel(dateFilter);
+    if (x.getTime() === today.getTime()) return "Today";
+    if (x.getTime() === yesterday.getTime()) return "Yesterday";
+    return formatDayLabel(dayKey(x));
+  }
+
+  const availableDates = useMemo(() => {
+    const set = new Set<string>();
+    jobs.forEach(j => {
+      if ((j.jobType ?? "online") === "walkin") return;
+      const d = dateBasis === "applied" ? toDate(j.appliedAt) : toDate(j.createdAt);
+      if (d) set.add(dayKey(d));
+    });
+    return Array.from(set).sort((a, b) => b.localeCompare(a));
+  }, [jobs, dateBasis]);
+
   const filteredJobs = jobs.filter(j => {
-    // Walk-ins live on /walk-in route planner, not inbox
     if ((j.jobType ?? "online") === "walkin") return false;
-    if (filterTab === "mine") return !j.copiedFromUID;
-    if (filterTab === "copied") return !!j.copiedFromUID;
+    if (filterTab === "mine") { if (j.copiedFromUID) return false; }
+    if (filterTab === "copied") { if (!j.copiedFromUID) return false; }
+    if (dateFilter !== "all") {
+      const d = jobDate(j);
+      if (!d) return false;
+      if (dayKey(d) !== dateFilter) return false;
+    }
     return true;
   });
 
@@ -97,13 +139,28 @@ export default function HomeView() {
     if (!grouped[label]) grouped[label] = [];
     grouped[label].push(j);
   });
-  const groupOrder = ["Today", "Yesterday", "Earlier"].filter(g => grouped[g]?.length);
+
+  const groupOrder = Object.keys(grouped).sort((a, b) => {
+    const rank = (label: string) => {
+      if (label === "Today") return 0;
+      if (label === "Yesterday") return 1;
+      if (label === "Not applied yet") return 999;
+      return 2;
+    };
+    const ra = rank(a); const rb = rank(b);
+    if (ra !== rb) return ra - rb;
+    // date labels newer first
+    try {
+      return new Date(b).getTime() - new Date(a).getTime();
+    } catch {
+      return a.localeCompare(b);
+    }
+  });
 
   return (
     <>
       <ToastProvider />
 
-      {/* Delete with secret PIN */}
       {deleteTarget && (
         <DeletePinModal
           mode={hasDeletePin ? "verify" : "setup"}
@@ -113,15 +170,6 @@ export default function HomeView() {
         />
       )}
 
-      {/* Job Details Modal */}
-      {selectedJob && (
-        <JobDetailsModal
-          job={selectedJob}
-          onClose={() => setSelectedJob(null)}
-        />
-      )}
-
-      {/* Page header */}
       <div className="page-header">
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 16 }}>
           <h1 className="page-title" style={{ display: "flex", alignItems: "center", gap: 12 }}>
@@ -133,7 +181,6 @@ export default function HomeView() {
             )}
           </h1>
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-            {/* View Toggles */}
             <div style={{ display: "flex", background: "var(--surface-card)", padding: 4, borderRadius: 6, border: "1px solid var(--hairline)" }}>
               {(["list", "cols-2", "cols-3", "cols-4", "board"] as const).map(mode => (
                 <button
@@ -161,7 +208,7 @@ export default function HomeView() {
                 </button>
               ))}
             </div>
-            
+
             <a href="/add-job" className="btn btn-primary" style={{ textDecoration: "none" }}>
               + Add job
             </a>
@@ -170,30 +217,84 @@ export default function HomeView() {
       </div>
 
       {!loading && jobs.length > 0 && (
-        <div style={{ display: "flex", gap: 24, marginBottom: 20, borderBottom: "1px solid var(--hairline)" }}>
-          {(
-            [
-              { id: "all", label: "All Jobs" },
-              { id: "mine", label: "Added by you" },
-              { id: "copied", label: "Taken from others" }
-            ] as const
-          ).map(tab => (
-            <button
-              key={tab.id}
-              onClick={() => setFilterTab(tab.id)}
+        <>
+          <div style={{ display: "flex", gap: 24, marginBottom: 14, borderBottom: "1px solid var(--hairline)" }}>
+            {(
+              [
+                { id: "all", label: "All Jobs" },
+                { id: "mine", label: "Added by you" },
+                { id: "copied", label: "Taken from others" },
+              ] as const
+            ).map(tab => (
+              <button
+                key={tab.id}
+                onClick={() => setFilterTab(tab.id)}
+                style={{
+                  background: "none", border: "none", cursor: "pointer", fontFamily: "inherit",
+                  fontSize: 13, fontWeight: filterTab === tab.id ? 700 : 500,
+                  color: filterTab === tab.id ? "var(--ink)" : "var(--mute)",
+                  padding: "8px 0",
+                  borderBottom: filterTab === tab.id ? "2px solid var(--ink)" : "2px solid transparent",
+                  marginBottom: -1,
+                }}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Date-wise filter */}
+          <div style={{
+            display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center",
+            marginBottom: 20,
+          }}>
+            <span style={{ fontSize: 11, fontWeight: 700, color: "var(--mute)", letterSpacing: "0.04em" }}>
+              DATE
+            </span>
+            <select
+              className="form-select"
+              value={dateBasis}
+              onChange={e => {
+                setDateBasis(e.target.value as "added" | "applied");
+                setDateFilter("all");
+              }}
               style={{
-                background: "none", border: "none",
-                padding: "0 4px 12px",
-                fontSize: 14, fontWeight: filterTab === tab.id ? 600 : 500,
-                color: filterTab === tab.id ? "var(--ink)" : "var(--mute)",
-                borderBottom: filterTab === tab.id ? "2px solid var(--ink)" : "2px solid transparent",
-                cursor: "pointer", fontFamily: "inherit"
+                width: "auto", minWidth: 140, height: 34, fontSize: 12, fontFamily: "inherit",
+                padding: "0 10px",
               }}
             >
-              {tab.label}
-            </button>
-          ))}
-        </div>
+              <option value="added">Added on</option>
+              <option value="applied">Form filled / Applied on</option>
+            </select>
+            <select
+              className="form-select"
+              value={dateFilter}
+              onChange={e => setDateFilter(e.target.value)}
+              style={{
+                width: "auto", minWidth: 160, height: 34, fontSize: 12, fontFamily: "inherit",
+                padding: "0 10px",
+              }}
+            >
+              <option value="all">All dates</option>
+              {availableDates.map(d => (
+                <option key={d} value={d}>{formatDayLabel(d)}</option>
+              ))}
+            </select>
+            {dateFilter !== "all" && (
+              <button
+                type="button"
+                onClick={() => setDateFilter("all")}
+                style={{
+                  background: "none", border: "1px solid var(--hairline)", borderRadius: 4,
+                  padding: "6px 10px", fontSize: 11, cursor: "pointer", fontFamily: "inherit",
+                  color: "var(--mute)",
+                }}
+              >
+                Clear date
+              </button>
+            )}
+          </div>
+        </>
       )}
 
       {loading ? (
@@ -201,7 +302,13 @@ export default function HomeView() {
       ) : filteredJobs.length === 0 ? (
         <div className="empty-state">
           <div className="empty-state-title">No jobs found</div>
-          <p style={{ marginBottom: 20 }}>{filterTab !== "all" ? "Try changing the filter to see jobs." : "Start tracking job listings — add your first one."}</p>
+          <p style={{ marginBottom: 20 }}>
+            {dateFilter !== "all"
+              ? "Is date pe is filter ke saath koi listing nahi mili."
+              : filterTab !== "all"
+                ? "Try changing the filter to see jobs."
+                : "Start tracking job listings — add your first one."}
+          </p>
           <a href="/add-job" className="btn btn-primary" style={{ textDecoration: "none" }}>+ Add job</a>
         </div>
       ) : viewMode === "board" ? (
@@ -209,12 +316,12 @@ export default function HomeView() {
           {(
             [
               { id: "pending", label: "Not Applied" },
-              { id: "applied", label: "Applied ✓" },
-              { id: "in_progress", label: "Pending ⏳" },
+              { id: "applied", label: "Applied" },
+              { id: "in_progress", label: "Pending" },
               { id: "no_response", label: "No Response" },
+              { id: "selected", label: "Selected" },
               { id: "rejected", label: "Rejected" },
-              { id: "selected", label: "🎉 Selected!" },
-            ] as const
+            ] as { id: JobStatus; label: string }[]
           ).map(col => {
             const colJobs = filteredJobs.filter(j => (j.status || "pending") === col.id);
             return (
@@ -225,7 +332,7 @@ export default function HomeView() {
                   display: "flex", flexDirection: "column", gap: 12,
                   background: "var(--surface)", padding: "16px 14px", borderRadius: 12,
                   border: "1px solid var(--hairline)", minHeight: "65vh",
-                  boxShadow: "inset 0 2px 4px rgba(0,0,0,0.015)"
+                  boxShadow: "inset 0 2px 4px rgba(0,0,0,0.015)",
                 }}
                 onDragOver={(e) => {
                   e.preventDefault();
@@ -253,23 +360,18 @@ export default function HomeView() {
                       isOwner={true}
                       showCopy={false}
                       onDelete={handleDelete}
-                      onClick={setSelectedJob}
+                      onClick={openJob}
                       draggable={true}
                       variant="kanban"
                       onDragStart={(e) => {
                         e.dataTransfer.setData("text/plain", job.id);
                         e.dataTransfer.effectAllowed = "move";
-                        // Add a slight transparency to the dragged item
                         setTimeout(() => {
-                           if (e.target instanceof HTMLElement) {
-                             e.target.style.opacity = "0.5";
-                           }
+                          if (e.target instanceof HTMLElement) e.target.style.opacity = "0.5";
                         }, 0);
                       }}
                       onDragEnd={(e) => {
-                         if (e.target instanceof HTMLElement) {
-                           e.target.style.opacity = "1";
-                         }
+                        if (e.target instanceof HTMLElement) e.target.style.opacity = "1";
                       }}
                     />
                   </div>
@@ -301,7 +403,7 @@ export default function HomeView() {
                     isOwner={true}
                     showCopy={false}
                     onDelete={handleDelete}
-                    onClick={setSelectedJob}
+                    onClick={openJob}
                   />
                 ))}
               </div>

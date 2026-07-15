@@ -1,0 +1,6 @@
+{
+  "rewrites": [
+    { "source": "/jobs/:id", "destination": "/jobs/_shell" },
+    { "source": "/users/:username", "destination": "/users/_shell" }
+  ]
+}
