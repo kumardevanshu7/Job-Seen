@@ -14,7 +14,9 @@ service cloud.firestore {
     }
 
     function isSuperAdmin() {
-      // Replace with your actual Super Admin UID
+      // Must match PUBLIC_SUPER_ADMIN_UID in .env / Vercel env vars.
+      // Replace the string below with your Firebase Auth UID, then:
+      //   firebase deploy --only firestore:rules
       return request.auth.uid == "YOUR_SUPER_ADMIN_UID_HERE";
     }
 

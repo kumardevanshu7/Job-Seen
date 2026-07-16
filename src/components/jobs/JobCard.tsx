@@ -436,12 +436,28 @@ export default function JobCard({ job, showCopy = true, isOwner = false, onDelet
               {onRoute ? "On Route ✓" : "+ Route"}
             </button>
           )}
-          <a href={job.applyLink} target="_blank" rel="noopener noreferrer"
-            style={{ background: "var(--ink,#201d1d)", color: "var(--canvas,#fdfcfc)", padding: "6px 14px", borderRadius: 3, fontSize: 12, fontWeight: 700, textDecoration: "none" }}
-            onClick={(e) => { e.stopPropagation(); if (isOwner && status === "pending") setStatus("applied"); }}
-          >
-            <span className="shrink-hide">Open Link </span>↗
-          </a>
+          {job.applyLink?.trim() && (
+            <a href={job.applyLink} target="_blank" rel="noopener noreferrer"
+              style={{ background: "var(--ink,#201d1d)", color: "var(--canvas,#fdfcfc)", padding: "6px 14px", borderRadius: 3, fontSize: 12, fontWeight: 700, textDecoration: "none" }}
+              onClick={(e) => { e.stopPropagation(); if (isOwner && status === "pending") setStatus("applied"); }}
+            >
+              <span className="shrink-hide">Open Link </span>↗
+            </a>
+          )}
+          {!job.applyLink?.trim() && (
+            <a
+              href={`/job?id=${encodeURIComponent(job.id)}`}
+              onClick={(e) => e.stopPropagation()}
+              style={{
+                background: "transparent", color: "var(--ink,#201d1d)",
+                border: "1px solid var(--hairline,#e2dede)",
+                padding: "5px 12px", borderRadius: 3, fontSize: 12, fontWeight: 600,
+                textDecoration: "none",
+              }}
+            >
+              Details →
+            </a>
+          )}
           {showCopy && !isOwner && (
             <button onClick={(e) => { e.stopPropagation(); handleCopy(); }} disabled={copying || hasCopied}
               style={{ background: hasCopied ? "#f0faf4" : "#fff", color: hasCopied ? "#1a7a3c" : "var(--ink,#201d1d)", border: hasCopied ? "1px solid #b7eb8f" : "1px solid var(--ink,#201d1d)", padding: "5px 12px", borderRadius: 3, fontSize: 12, fontWeight: 600, cursor: (copying || hasCopied) ? "default" : "pointer" }}

@@ -74,7 +74,7 @@ export default function HomeView() {
   }
 
   function openJob(job: JobCardType) {
-    window.location.href = `/jobs/${job.id}`;
+    window.location.href = `/job?id=${encodeURIComponent(job.id)}`;
   }
 
   async function confirmDeleteWithPin(pin: string) {

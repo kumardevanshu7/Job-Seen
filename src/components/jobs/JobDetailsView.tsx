@@ -26,11 +26,14 @@ const STATUS_CONFIG: Record<JobStatus, { label: string; color: string; bg: strin
   cancelled:       { label: "Cancelled",         color: "#78716c", bg: "#fafaf9", border: "#d6d3d1" },
 };
 
-function jobIdFromPath(): string {
+function jobIdFromUrl(): string {
   if (typeof window === "undefined") return "";
+  const fromQuery = new URLSearchParams(window.location.search).get("id");
+  if (fromQuery) return fromQuery;
+  // legacy /jobs/<id> paths
   const parts = window.location.pathname.split("/").filter(Boolean);
-  // /jobs/<id>
-  return parts[0] === "jobs" ? (parts[1] || "") : "";
+  if (parts[0] === "jobs" && parts[1] && parts[1] !== "_shell") return parts[1];
+  return "";
 }
 
 function toDate(d: any): Date | null {
@@ -256,10 +259,10 @@ export default function JobDetailsView() {
   const [updating, setUpdating] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
 
-  const [jobId, setJobId] = useState(() => jobIdFromPath());
+  const [jobId, setJobId] = useState(() => jobIdFromUrl());
 
   useEffect(() => {
-    const sync = () => setJobId(jobIdFromPath());
+    const sync = () => setJobId(jobIdFromUrl());
     document.addEventListener("astro:page-load", sync);
     window.addEventListener("popstate", sync);
     sync();
@@ -278,6 +281,7 @@ export default function JobDetailsView() {
     if (!jobId || jobId === "_shell") {
       setNotFound(true);
       setLoading(false);
+      setJob(null);
       return;
     }
     let cancelled = false;

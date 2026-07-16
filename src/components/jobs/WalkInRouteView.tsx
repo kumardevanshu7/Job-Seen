@@ -598,11 +598,18 @@ export default function WalkInRouteView() {
               {activeJob.role} · mark this stop
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              <a
+                href={`/job?id=${encodeURIComponent(activeJob.id)}`}
+                className="btn btn-primary"
+                style={{ justifyContent: "center", textDecoration: "none" }}
+              >
+                View full details →
+              </a>
               <button
                 type="button"
-                className="btn btn-primary"
+                className="btn btn-secondary"
                 onClick={() => setStatus(activeJob.id, "interview_done")}
-                style={{ justifyContent: "center", background: "#1a7a3c" }}
+                style={{ justifyContent: "center", background: "#f0faf4", color: "#1a7a3c", borderColor: "#b7eb8f" }}
               >
                 Interview done
               </button>

@@ -86,7 +86,13 @@ export default function UserJobsView({ username }: Props) {
           ) : (
             <div className="job-list">
               {jobs.map(job => (
-                <JobCard key={job.id} job={job} showCopy={true} isOwner={false} />
+                <JobCard
+                  key={job.id}
+                  job={job}
+                  showCopy={true}
+                  isOwner={false}
+                  onClick={(j) => { window.location.href = `/job?id=${encodeURIComponent(j.id)}`; }}
+                />
               ))}
             </div>
           )}

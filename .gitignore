@@ -25,5 +25,5 @@ pnpm-debug.log*
 # jetbrains setting folder
 .idea/
 
-# Internal documentation
-ARIGATO_BRANDING_SETUP.md
+# Arigato Labs internal kit (logos + setup blueprints — keep local / copy into new projects)
+brand-right/

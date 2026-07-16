@@ -1,0 +1,8 @@
+---
+import AppLayout from "../layouts/AppLayout.astro";
+import JobDetailsView from "../components/jobs/JobDetailsView";
+---
+<!-- Static page (always built). Reads job id from ?id= — works on Vercel without rewrite hacks. -->
+<AppLayout title="Job Details">
+  <JobDetailsView client:only="react" />
+</AppLayout>
