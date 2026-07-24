@@ -358,6 +358,7 @@ export default function BruteForceJobsView() {
   const [creating, setCreating] = useState(false);
   const [importing, setImporting] = useState(false);
   const [importProgress, setImportProgress] = useState<ImportProgress | null>(null);
+  const [pastedJson, setPastedJson] = useState("");
   const [busyId, setBusyId] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<BruteForceJob | null>(null);
   const [deleteError, setDeleteError] = useState("");
@@ -446,45 +447,45 @@ export default function BruteForceJobsView() {
     }
   }
 
-  async function handleImport(event: React.ChangeEvent<HTMLInputElement>) {
-    const input = event.currentTarget;
-    const file = input.files?.[0];
-    if (!file) return;
+  function showImportError(message: string) {
+    setImportProgress({ stage: "error", title: "Import failed", message });
+    showToast(message, "error");
+  }
 
-    const showImportError = (message: string) => {
-      setImportProgress({ stage: "error", title: "Import failed", message });
-      showToast(message, "error");
-      input.value = "";
-    };
-
+  async function runJsonImport(
+    readContents: () => Promise<string>,
+    sourceLabel: string,
+    clearPastedJsonOnSuccess = false
+  ) {
     if (!auth.user || !auth.profile) {
       showImportError("Not logged in.");
-      return;
-    }
-    if (!file.name.toLowerCase().endsWith(".json")) {
-      showImportError("Sirf .json file upload karo.");
-      return;
-    }
-    if (file.size > MAX_IMPORT_FILE_BYTES) {
-      showImportError("JSON file maximum 1 MB ho sakti hai.");
       return;
     }
 
     setImporting(true);
     setImportProgress({
       stage: "reading",
-      title: "Reading JSON file",
-      message: `${file.name} read ho rahi hai…`,
+      title: "Preparing JSON",
+      message: `${sourceLabel} securely read ho raha hai…`,
     });
 
     try {
-      const contents = await file.text();
+      const contents = await readContents();
+      await waitForNextPaint();
+      await new Promise(resolve => window.setTimeout(resolve, 280));
+
+      if (!contents.trim()) throw new Error("JSON paste area empty hai.");
+      if (new Blob([contents]).size > MAX_IMPORT_FILE_BYTES) {
+        throw new Error("JSON content maximum 1 MB ho sakta hai.");
+      }
+
       setImportProgress({
         stage: "validating",
         title: "Validating job details",
         message: "Company, role, phone, location aur HTTPS map links check ho rahe hain…",
       });
       await waitForNextPaint();
+      await new Promise(resolve => window.setTimeout(resolve, 360));
 
       const rows = parseImportRows(contents);
       setImportProgress({
@@ -496,6 +497,7 @@ export default function BruteForceJobsView() {
 
       const importedCount = await createBruteForceJobs(auth.user.uid, auth.profile.username, rows);
       setActiveSection("active");
+      if (clearPastedJsonOnSuccess) setPastedJson("");
       setImportProgress({
         stage: "complete",
         title: "Import complete",
@@ -503,13 +505,34 @@ export default function BruteForceJobsView() {
       });
       showToast(`${importedCount} leads import ho gayi.`, "success");
     } catch (err: any) {
-      const message = err.message ?? "JSON import failed.";
-      setImportProgress({ stage: "error", title: "Import failed", message });
-      showToast(message, "error");
+      showImportError(err.message ?? "JSON import failed.");
     } finally {
       setImporting(false);
-      input.value = "";
     }
+  }
+
+  async function handleImport(event: React.ChangeEvent<HTMLInputElement>) {
+    const input = event.currentTarget;
+    const file = input.files?.[0];
+    if (!file) return;
+
+    if (!file.name.toLowerCase().endsWith(".json")) {
+      showImportError("Sirf .json file upload karo.");
+      input.value = "";
+      return;
+    }
+    if (file.size > MAX_IMPORT_FILE_BYTES) {
+      showImportError("JSON file maximum 1 MB ho sakti hai.");
+      input.value = "";
+      return;
+    }
+
+    await runJsonImport(() => file.text(), file.name);
+    input.value = "";
+  }
+
+  async function handlePastedImport() {
+    await runJsonImport(() => Promise.resolve(pastedJson), "Pasted JSON", true);
   }
 
   function openSchedule(lead: BruteForceJob, action: "success" | "reschedule") {
@@ -625,6 +648,20 @@ export default function BruteForceJobsView() {
           onConfirm={confirmDelete}
         />
       )}
+      <style>{`
+        @keyframes jsonLoaderSpin { to { transform: rotate(360deg); } }
+        @keyframes jsonLoaderSpinReverse { to { transform: rotate(-360deg); } }
+        @keyframes jsonLoaderPulse { 0%, 100% { transform: scale(0.72); opacity: 0.45; } 50% { transform: scale(1); opacity: 1; } }
+        @keyframes jsonProgressFlow { to { background-position: 200% 0; } }
+        @keyframes jsonModalIn { from { opacity: 0; transform: translateY(10px) scale(0.97); } to { opacity: 1; transform: translateY(0) scale(1); } }
+        .json-import-loader { position: relative; width: 52px; height: 52px; flex: 0 0 52px; display: grid; place-items: center; }
+        .json-loader-orbit { position: absolute; border-radius: 50%; border: 2px solid transparent; }
+        .json-loader-orbit-a { inset: 0; border-top-color: #7c3aed; border-right-color: #7c3aed; animation: jsonLoaderSpin 0.9s linear infinite; }
+        .json-loader-orbit-b { inset: 7px; border-bottom-color: #0ea5e9; border-left-color: #0ea5e9; animation: jsonLoaderSpinReverse 0.72s linear infinite; }
+        .json-loader-core { width: 9px; height: 9px; border-radius: 50%; background: #22c55e; box-shadow: 0 0 14px #22c55e; animation: jsonLoaderPulse 0.85s ease-in-out infinite; }
+        .json-loader-percent { position: absolute; top: 57px; font-size: 9px; font-weight: 800; color: var(--mute); letter-spacing: 0.03em; }
+        .json-progress-active { background: linear-gradient(90deg, #7c3aed, #0ea5e9, #22c55e, #7c3aed) !important; background-size: 200% 100% !important; animation: jsonProgressFlow 1.2s linear infinite; }
+      `}</style>
       {importProgress && (
         <div
           style={{
@@ -651,15 +688,21 @@ export default function BruteForceJobsView() {
               padding: 24,
               background: "var(--canvas)",
               boxShadow: "0 18px 60px rgba(15, 0, 0, 0.2)",
+              animation: "jsonModalIn 180ms ease-out",
             }}
           >
             <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
               {importProgress.stage === "complete" ? (
-                <span aria-hidden="true" style={{ color: "#15803d", fontSize: 25 }}>✓</span>
+                <span aria-hidden="true" style={{ color: "#15803d", fontSize: 30, width: 52, textAlign: "center" }}>✓</span>
               ) : importProgress.stage === "error" ? (
-                <span aria-hidden="true" style={{ color: "#b91c1c", fontSize: 25 }}>!</span>
+                <span aria-hidden="true" style={{ color: "#b91c1c", fontSize: 30, width: 52, textAlign: "center" }}>!</span>
               ) : (
-                <div className="spinner" style={{ width: 20, height: 20, flexShrink: 0 }} />
+                <div className="json-import-loader" aria-hidden="true">
+                  <span className="json-loader-orbit json-loader-orbit-a" />
+                  <span className="json-loader-orbit json-loader-orbit-b" />
+                  <span className="json-loader-core" />
+                  <span className="json-loader-percent">{IMPORT_PROGRESS_PERCENT[importProgress.stage]}%</span>
+                </div>
               )}
               <div>
                 <h2 id="import-progress-title" style={{ margin: 0, color: "var(--ink)", fontSize: 17 }}>
@@ -673,6 +716,7 @@ export default function BruteForceJobsView() {
 
             <div style={{ height: 6, marginTop: 20, overflow: "hidden", borderRadius: 999, background: "var(--surface-soft)" }}>
               <div
+                className={importing ? "json-progress-active" : undefined}
                 style={{
                   width: `${IMPORT_PROGRESS_PERCENT[importProgress.stage]}%`,
                   height: "100%",
@@ -749,19 +793,64 @@ export default function BruteForceJobsView() {
         <pre style={{ margin: "12px 0", padding: 10, overflowX: "auto", borderRadius: 6, background: "var(--surface-soft)", color: "var(--body)", fontSize: 10, lineHeight: 1.5 }}>
           {`[{"company":"TCS","role":"Developer","phone":"+91 98765 43210","location":"Noida","mapLink":"https://maps.google.com/..."}]`}
         </pre>
-        <label
-          className="btn btn-secondary"
-          style={{ opacity: importing ? 0.6 : 1, cursor: importing ? "wait" : "pointer" }}
-        >
-          {importing ? "Importing…" : "Upload JSON file"}
-          <input
-            type="file"
-            accept=".json,application/json"
-            disabled={importing}
-            onChange={handleImport}
-            style={{ display: "none" }}
-          />
-        </label>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+          <label
+            className="btn btn-secondary"
+            style={{ opacity: importing ? 0.6 : 1, cursor: importing ? "wait" : "pointer" }}
+          >
+            {importing ? "Importing…" : "Upload JSON file"}
+            <input
+              type="file"
+              accept=".json,application/json"
+              disabled={importing}
+              onChange={handleImport}
+              style={{ display: "none" }}
+            />
+          </label>
+          <span style={{ fontSize: 11, color: "var(--mute)" }}>or paste JSON below</span>
+        </div>
+
+        <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "18px 0 12px" }}>
+          <span style={{ height: 1, background: "var(--hairline)", flex: 1 }} />
+          <span style={{ fontSize: 10, fontWeight: 800, color: "var(--mute)", letterSpacing: "0.08em" }}>PASTE JSON DIRECTLY</span>
+          <span style={{ height: 1, background: "var(--hairline)", flex: 1 }} />
+        </div>
+
+        <textarea
+          className="form-input"
+          value={pastedJson}
+          onChange={event => setPastedJson(event.target.value)}
+          disabled={importing}
+          rows={7}
+          spellCheck={false}
+          aria-label="Paste JSON jobs"
+          placeholder={'[{\n  "company": "TCS",\n  "role": "Developer",\n  "phone": "+91 98765 43210",\n  "location": "Noida",\n  "mapLink": "https://maps.google.com/..."\n}]'}
+          style={{
+            width: "100%", boxSizing: "border-box", resize: "vertical", minHeight: 150,
+            fontFamily: '"JetBrains Mono", "IBM Plex Mono", Consolas, monospace',
+            fontSize: 12, lineHeight: 1.55, tabSize: 2, background: "var(--surface-soft)",
+          }}
+        />
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap", marginTop: 10 }}>
+          <span style={{ fontSize: 10, color: "var(--mute)" }}>
+            {pastedJson.length.toLocaleString("en-IN")} characters · maximum 100 cards
+          </span>
+          <div style={{ display: "flex", gap: 8 }}>
+            {pastedJson && (
+              <button type="button" className="btn btn-ghost btn-sm" disabled={importing} onClick={() => setPastedJson("")}>
+                Clear
+              </button>
+            )}
+            <button
+              type="button"
+              className="btn btn-primary"
+              disabled={importing || !pastedJson.trim()}
+              onClick={handlePastedImport}
+            >
+              {importing ? "Creating cards…" : "Create cards from pasted JSON"}
+            </button>
+          </div>
+        </div>
       </div>
 
       <form onSubmit={handleCreate} className="form-card" style={{ marginBottom: 32, maxWidth: 620 }}>
