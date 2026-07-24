@@ -12,6 +12,29 @@ interface Props {
   requireAdmin?: boolean;
 }
 
+function sleep(ms: number) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+/**
+ * Right after sign-in, Firestore's auth token can take a moment to propagate.
+ * A request in that short window can fail with permission-denied even though
+ * the rules are correct. Retry a couple of times before treating it as real.
+ */
+async function withAuthPropagationRetry<T>(task: () => Promise<T>): Promise<T> {
+  const delays = [300, 800, 1500];
+  for (let attempt = 0; attempt <= delays.length; attempt++) {
+    try {
+      return await task();
+    } catch (err: any) {
+      const isPermissionIssue = err?.code === "permission-denied";
+      if (!isPermissionIssue || attempt === delays.length) throw err;
+      await sleep(delays[attempt]);
+    }
+  }
+  throw new Error("unreachable");
+}
+
 export default function AuthProvider({ children, requireAdmin = false }: Props) {
   const cached = $auth.get();
   const [state, setState] = useState({
@@ -48,10 +71,10 @@ export default function AuthProvider({ children, requireAdmin = false }: Props) 
       }
 
       try {
-        const [admin, profile] = await Promise.all([
+        const [admin, profile] = await withAuthPropagationRetry(() => Promise.all([
           hasAdminClaim(user),
           getUserProfile(user.uid),
-        ]);
+        ]));
         if (disposed || currentGeneration !== generation) return;
 
         if (requireAdmin && !admin) {
