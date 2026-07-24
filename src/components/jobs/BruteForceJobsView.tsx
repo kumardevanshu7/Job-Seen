@@ -197,9 +197,12 @@ function LeadCard(props: LeadCardProps) {
   );
 }
 
+type LeadSection = "active" | "selected" | "rejected";
+
 export default function BruteForceJobsView() {
   const auth = useStore($auth);
   const [leads, setLeads] = useState<BruteForceJob[]>([]);
+  const [activeSection, setActiveSection] = useState<LeadSection>("active");
   const [loading, setLoading] = useState(true);
   const [form, setForm] = useState(INITIAL_FORM);
   const [creating, setCreating] = useState(false);
@@ -228,6 +231,30 @@ export default function BruteForceJobsView() {
   const active = useMemo(() => leads.filter(lead => lead.decision === "pending"), [leads]);
   const selected = useMemo(() => leads.filter(lead => lead.decision === "selected"), [leads]);
   const rejected = useMemo(() => leads.filter(lead => lead.decision === "rejected"), [leads]);
+  const sections: { id: LeadSection; label: string; items: BruteForceJob[]; emptyTitle: string; emptyText: string }[] = [
+    {
+      id: "active",
+      label: "Active leads",
+      items: active,
+      emptyTitle: "Koi active lead nahi hai",
+      emptyText: "ChatGPT/Gemini se company list nikalo aur upar form se lead add karo.",
+    },
+    {
+      id: "selected",
+      label: "Selected",
+      items: selected,
+      emptyTitle: "Abhi tak koi selection nahi hui",
+      emptyText: "Selected companies yahan dikhengi.",
+    },
+    {
+      id: "rejected",
+      label: "Rejected",
+      items: rejected,
+      emptyTitle: "Abhi tak koi rejection nahi hui",
+      emptyText: "Rejected companies yahan dikhengi.",
+    },
+  ];
+  const visibleSection = sections.find(section => section.id === activeSection) ?? sections[0];
 
   function setField(key: keyof typeof INITIAL_FORM, value: string) {
     setForm(prev => ({ ...prev, [key]: value }));
@@ -355,68 +382,88 @@ export default function BruteForceJobsView() {
         </button>
       </form>
 
-      <div className="section-label" style={{ marginBottom: 12 }}>Active leads ({active.length})</div>
-      {active.length === 0 ? (
-        <div className="empty-state">
-          <div className="empty-state-title">Koi active lead nahi hai</div>
-          <p>ChatGPT/Gemini se company list nikalo aur upar form se lead add karo.</p>
-        </div>
-      ) : (
-        <div style={{ display: "flex", flexDirection: "column", gap: 14, marginBottom: 40 }}>
-          {active.map(lead => (
-            <LeadCard
-              key={lead.id}
-              lead={lead}
-              now={now}
-              busy={busyId === lead.id}
-              scheduleId={scheduleId}
-              scheduleMode={scheduleMode}
-              scheduleAt={scheduleAt}
-              onScheduleMode={setScheduleMode}
-              onScheduleAt={setScheduleAt}
-              onOpenSchedule={openSchedule}
-              onCloseSchedule={closeSchedule}
-              onSaveSchedule={handleSaveSchedule}
-              onOutcome={handleOutcome}
-              onDecision={handleDecision}
-            />
-          ))}
-        </div>
-      )}
+      <div
+        role="tablist"
+        aria-label="Brute force job sections"
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+          borderBottom: "1px solid var(--hairline-strong)",
+          marginBottom: 20,
+        }}
+      >
+        {sections.map((section, index) => {
+          const isCurrent = section.id === activeSection;
+          return (
+            <button
+              key={section.id}
+              id={`lead-tab-${section.id}`}
+              type="button"
+              role="tab"
+              aria-selected={isCurrent}
+              aria-controls={`lead-panel-${section.id}`}
+              onClick={() => {
+                setActiveSection(section.id);
+                closeSchedule();
+              }}
+              style={{
+                minWidth: 0,
+                padding: "13px 6px",
+                border: 0,
+                borderRight: index < sections.length - 1 ? "1px solid var(--hairline-strong)" : "none",
+                borderBottom: isCurrent ? "3px solid var(--ink)" : "3px solid transparent",
+                marginBottom: -1,
+                background: isCurrent ? "var(--surface-soft)" : "transparent",
+                color: isCurrent ? "var(--ink)" : "var(--mute)",
+                fontFamily: "inherit",
+                fontSize: 12,
+                fontWeight: isCurrent ? 750 : 600,
+                cursor: "pointer",
+                whiteSpace: "nowrap",
+              }}
+            >
+              {section.label} ({section.items.length})
+            </button>
+          );
+        })}
+      </div>
 
-      <div className="section-label" style={{ marginBottom: 12 }}>Selected ({selected.length})</div>
-      {selected.length === 0 ? (
-        <p className="form-hint" style={{ marginBottom: 32 }}>Abhi tak koi selection nahi hui.</p>
-      ) : (
-        <div style={{ display: "flex", flexDirection: "column", gap: 14, marginBottom: 40 }}>
-          {selected.map(lead => (
-            <LeadCard
-              key={lead.id} lead={lead} now={now} busy={false}
-              scheduleId={null} scheduleMode="offline" scheduleAt=""
-              onScheduleMode={() => {}} onScheduleAt={() => {}}
-              onOpenSchedule={() => {}} onCloseSchedule={() => {}}
-              onSaveSchedule={() => {}} onOutcome={() => {}} onDecision={() => {}}
-            />
-          ))}
-        </div>
-      )}
-
-      <div className="section-label" style={{ marginBottom: 12 }}>Rejected ({rejected.length})</div>
-      {rejected.length === 0 ? (
-        <p className="form-hint">Abhi tak koi rejection nahi hui.</p>
-      ) : (
-        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-          {rejected.map(lead => (
-            <LeadCard
-              key={lead.id} lead={lead} now={now} busy={false}
-              scheduleId={null} scheduleMode="offline" scheduleAt=""
-              onScheduleMode={() => {}} onScheduleAt={() => {}}
-              onOpenSchedule={() => {}} onCloseSchedule={() => {}}
-              onSaveSchedule={() => {}} onOutcome={() => {}} onDecision={() => {}}
-            />
-          ))}
-        </div>
-      )}
+      <section
+        id={`lead-panel-${activeSection}`}
+        role="tabpanel"
+        aria-labelledby={`lead-tab-${activeSection}`}
+      >
+        {visibleSection.items.length === 0 ? (
+          <div className="empty-state">
+            <div className="empty-state-title">{visibleSection.emptyTitle}</div>
+            <p>{visibleSection.emptyText}</p>
+          </div>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 14, marginBottom: 40 }}>
+            {visibleSection.items.map(lead => {
+              const isActiveLead = activeSection === "active";
+              return (
+                <LeadCard
+                  key={lead.id}
+                  lead={lead}
+                  now={now}
+                  busy={isActiveLead && busyId === lead.id}
+                  scheduleId={isActiveLead ? scheduleId : null}
+                  scheduleMode={isActiveLead ? scheduleMode : "offline"}
+                  scheduleAt={isActiveLead ? scheduleAt : ""}
+                  onScheduleMode={isActiveLead ? setScheduleMode : () => {}}
+                  onScheduleAt={isActiveLead ? setScheduleAt : () => {}}
+                  onOpenSchedule={isActiveLead ? openSchedule : () => {}}
+                  onCloseSchedule={isActiveLead ? closeSchedule : () => {}}
+                  onSaveSchedule={isActiveLead ? handleSaveSchedule : () => {}}
+                  onOutcome={isActiveLead ? handleOutcome : () => {}}
+                  onDecision={isActiveLead ? handleDecision : () => {}}
+                />
+              );
+            })}
+          </div>
+        )}
+      </section>
     </>
   );
 }
