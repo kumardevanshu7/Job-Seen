@@ -305,6 +305,46 @@ export async function createBruteForceJobs(
   return rows.length;
 }
 
+export function bruteForceRouteJobId(ownerUID: string, leadId: string): string {
+  return `brute_route_${ownerUID}_${leadId}`;
+}
+
+export async function addBruteForceJobToRoute(
+  lead: BruteForceJob,
+  ownerUID: string,
+  ownerUsername: string
+): Promise<string> {
+  if (lead.ownerUID !== ownerUID) throw new Error("Only the lead owner can add it to a route.");
+
+  const routeRef = doc(db, "jobs", bruteForceRouteJobId(ownerUID, lead.id));
+  try {
+    await updateDoc(routeRef, { onRoute: true, routeOrder: Date.now() });
+    return routeRef.id;
+  } catch (error: any) {
+    if (error?.code !== "not-found") throw error;
+  }
+
+  await setDoc(routeRef, buildJobPayload(ownerUID, ownerUsername, {
+    jobType: "walkin",
+    company: lead.company,
+    location: lead.location,
+    role: lead.role,
+    ctc: "",
+    applyLink: "",
+    appliedVia: "Brute Force",
+    appliedViaOther: "",
+    batch: [],
+    bond: "",
+    lastDate: null,
+    mapLink: lead.mapLink,
+    nearestMetro: "",
+    routeOrder: Date.now(),
+    onRoute: true,
+    status: "pending",
+  }), { merge: true });
+  return routeRef.id;
+}
+
 export function subscribeToBruteForceJobs(
   uid: string,
   callback: (jobs: BruteForceJob[]) => void

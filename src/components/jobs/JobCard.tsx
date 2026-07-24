@@ -68,6 +68,12 @@ const platformShort: Record<string, string> = {
   "Others":           "other",
 };
 
+function isOnWalkInRoute(job: JobCardType): boolean {
+  if (job.onRoute === true) return true;
+  if (job.onRoute === false) return false;
+  return (job.jobType ?? "online") === "walkin";
+}
+
 export default function JobCard({ job, showCopy = true, isOwner = false, onDelete, onClick, index = 0, draggable, onDragStart, onDragEnd, variant = "default" }: Props) {
   const auth = useStore($auth);
   const [copying, setCopying] = useState(false);
@@ -75,13 +81,13 @@ export default function JobCard({ job, showCopy = true, isOwner = false, onDelet
   const [updating, setUpdating] = useState(false);
   const [localStatus, setLocalStatus] = useState<JobStatus>(job.status ?? "pending");
   const [showCancelReason, setShowCancelReason] = useState(false);
-  const [onRoute, setOnRoute] = useState(!!job.onRoute);
+  const [onRoute, setOnRoute] = useState(isOnWalkInRoute(job));
 
   // keep local flags in sync with live firestore updates
   useEffect(() => {
     setLocalStatus(job.status ?? "pending");
-    setOnRoute(!!job.onRoute);
-  }, [job.status, job.onRoute]);
+    setOnRoute(isOnWalkInRoute(job));
+  }, [job.status, job.onRoute, job.jobType]);
 
   const status = localStatus;
   const cfg = STATUS_CONFIG[status] ?? STATUS_CONFIG.pending;
@@ -90,7 +96,6 @@ export default function JobCard({ job, showCopy = true, isOwner = false, onDelet
     && status === "applied"
     && daysApplied >= 3
     && !job.reminderDismissedAt;
-  const isOnline = (job.jobType ?? "online") === "online";
 
   const platform = job.appliedVia === "Others"
     ? (job.appliedViaOther || "other")
@@ -308,7 +313,7 @@ export default function JobCard({ job, showCopy = true, isOwner = false, onDelet
             why: {job.cancelReason || "—"}
           </span>
         )}
-        {onRoute && isOnline && (
+        {onRoute && (
           <span style={{ background: "#fff7ed", border: "1px solid #fdba74", color: "#c2410c", fontSize: 11, padding: "3px 8px", borderRadius: 3 }}>
             on route
           </span>
@@ -423,7 +428,7 @@ export default function JobCard({ job, showCopy = true, isOwner = false, onDelet
           )}
         </div>
         <div style={{ display: "flex", gap: 8 }}>
-          {isOwner && isOnline && variant !== "kanban" && (
+          {isOwner && (
             <button
               onClick={toggleRoute}
               style={{

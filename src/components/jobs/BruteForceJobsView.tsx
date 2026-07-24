@@ -2,12 +2,15 @@ import { useEffect, useMemo, useState } from "react";
 import { useStore } from "@nanostores/react";
 import { $auth } from "../../stores/authStore";
 import {
+  addBruteForceJobToRoute,
+  bruteForceRouteJobId,
   createBruteForceJob,
   createBruteForceJobs,
   recordBruteForceCallOutcome,
   rescheduleBruteForceInterview,
   setBruteForceDecision,
   subscribeToBruteForceJobs,
+  subscribeToUserJobs,
   type BruteForceCallOutcome,
   type BruteForceDecision,
   type BruteForceJob,
@@ -152,6 +155,8 @@ interface LeadCardProps {
   scheduleId: string | null;
   scheduleMode: InterviewMode;
   scheduleAt: string;
+  onRoute: boolean;
+  onAddToRoute: (lead: BruteForceJob) => void;
   onScheduleMode: (mode: InterviewMode) => void;
   onScheduleAt: (value: string) => void;
   onOpenSchedule: (lead: BruteForceJob, action: "success" | "reschedule") => void;
@@ -189,6 +194,15 @@ function LeadCard(props: LeadCardProps) {
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 14 }}>
         {phoneHref ? <a className="btn btn-secondary btn-sm" href={phoneHref}>Call {lead.phone}</a> : <span className="form-hint">Phone not available</span>}
         {safeMapLink && <a className="btn btn-secondary btn-sm" href={safeMapLink} target="_blank" rel="noopener noreferrer">Open map ↗</a>}
+        <button
+          type="button"
+          className="btn btn-secondary btn-sm"
+          disabled={busy || props.onRoute}
+          onClick={() => props.onAddToRoute(lead)}
+          style={props.onRoute ? { color: "#15803d", borderColor: "#bbf7d0", background: "#f0fdf4" } : undefined}
+        >
+          {props.onRoute ? "On Walk-in Route ✓" : "+ Add to Walk-in Route"}
+        </button>
       </div>
 
       {!isFinal && lead.callOutcome !== "success" && (
@@ -318,6 +332,7 @@ function waitForNextPaint(): Promise<void> {
 export default function BruteForceJobsView() {
   const auth = useStore($auth);
   const [leads, setLeads] = useState<BruteForceJob[]>([]);
+  const [routeJobIds, setRouteJobIds] = useState<Set<string>>(() => new Set());
   const [activeSection, setActiveSection] = useState<LeadSection>("active");
   const [loading, setLoading] = useState(true);
   const [form, setForm] = useState(INITIAL_FORM);
@@ -334,11 +349,17 @@ export default function BruteForceJobsView() {
 
   useEffect(() => {
     if (!auth.user) return;
-    const unsubscribe = subscribeToBruteForceJobs(auth.user.uid, data => {
+    const unsubscribeLeads = subscribeToBruteForceJobs(auth.user.uid, data => {
       setLeads(data);
       setLoading(false);
     });
-    return () => unsubscribe();
+    const unsubscribeRouteJobs = subscribeToUserJobs(auth.user.uid, jobs => {
+      setRouteJobIds(new Set(jobs.filter(job => job.onRoute === true).map(job => job.id)));
+    });
+    return () => {
+      unsubscribeLeads();
+      unsubscribeRouteJobs();
+    };
   }, [auth.user]);
 
   useEffect(() => {
@@ -518,6 +539,23 @@ export default function BruteForceJobsView() {
       showToast(decision === "selected" ? "Marked as selected! 🎉" : "Marked as rejected.", decision === "selected" ? "success" : "info");
     } catch (err: any) {
       showToast(err.message ?? "Failed to update.", "error");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function handleAddToRoute(lead: BruteForceJob) {
+    if (!auth.user || !auth.profile) {
+      showToast("Not logged in.", "error");
+      return;
+    }
+
+    setBusyId(lead.id);
+    try {
+      await addBruteForceJobToRoute(lead, auth.user.uid, auth.profile.username);
+      showToast("Walk-in Route mein add ho gaya. Route status alag track hoga.", "success");
+    } catch (err: any) {
+      showToast(err.message ?? "Walk-in Route mein add nahi ho paya.", "error");
     } finally {
       setBusyId(null);
     }
@@ -763,10 +801,12 @@ export default function BruteForceJobsView() {
                   key={lead.id}
                   lead={lead}
                   now={now}
-                  busy={isActiveLead && busyId === lead.id}
+                  busy={busyId === lead.id}
                   scheduleId={isActiveLead ? scheduleId : null}
                   scheduleMode={isActiveLead ? scheduleMode : "offline"}
                   scheduleAt={isActiveLead ? scheduleAt : ""}
+                  onRoute={auth.user ? routeJobIds.has(bruteForceRouteJobId(auth.user.uid, lead.id)) : false}
+                  onAddToRoute={handleAddToRoute}
                   onScheduleMode={isActiveLead ? setScheduleMode : () => {}}
                   onScheduleAt={isActiveLead ? setScheduleAt : () => {}}
                   onOpenSchedule={isActiveLead ? openSchedule : () => {}}
