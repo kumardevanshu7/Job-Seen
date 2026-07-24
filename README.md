@@ -7,7 +7,7 @@
 
 ---
 
-> **Note**: This project falls under **Arigato Labs**.
+> **Note **: This project falls under **Arigato Labs**.
 
 ## 🚀 Features
 
