@@ -248,7 +248,8 @@ service cloud.firestore {
       allow list: if admin();
       allow create: if self(uid)
         && validPrivateUser(request.resource.data)
-        && request.resource.data.createdAt == request.time
+        // Allows a preserved legacy createdAt (migration) as well as a brand-new signup.
+        && request.resource.data.createdAt <= request.time
         && request.resource.data.updatedAt == request.time;
       allow update: if (self(uid) || admin())
         && validPrivateUser(request.resource.data)
@@ -266,7 +267,8 @@ service cloud.firestore {
       allow create: if self(uid)
         && validPublicProfile(request.resource.data)
         && request.resource.data.uid == uid
-        && request.resource.data.createdAt == request.time
+        // Allows a preserved legacy createdAt (migration) as well as a brand-new signup.
+        && request.resource.data.createdAt <= request.time
         && request.resource.data.updatedAt == request.time
         && getAfter(/databases/$(database)/documents/usernames/$(request.resource.data.username)).data.uid == uid;
       allow update: if (self(uid) || admin())
