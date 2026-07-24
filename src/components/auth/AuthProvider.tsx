@@ -18,6 +18,7 @@ export default function AuthProvider({ children, requireAdmin = false }: Props) 
     loading: !(cached.initialized && cached.user && cached.profile),
     needsUsername: false,
     notAdmin: false,
+    loadError: false,
   });
 
   useEffect(() => {
@@ -41,7 +42,7 @@ export default function AuthProvider({ children, requireAdmin = false }: Props) 
 
       if (!user) {
         setAuthState({ user: null, profile: null, isAdmin: false, loading: false, initialized: true });
-        setState({ loading: false, needsUsername: false, notAdmin: false });
+        setState({ loading: false, needsUsername: false, notAdmin: false, loadError: false });
         window.location.href = "/login";
         return;
       }
@@ -55,18 +56,18 @@ export default function AuthProvider({ children, requireAdmin = false }: Props) 
 
         if (requireAdmin && !admin) {
           setAuthState({ user, profile: null, isAdmin: false, loading: false, initialized: true });
-          setState({ loading: false, needsUsername: false, notAdmin: true });
+          setState({ loading: false, needsUsername: false, notAdmin: true, loadError: false });
           return;
         }
 
         if (!profile?.username) {
           setAuthState({ user, profile: null, isAdmin: admin, loading: false, initialized: true });
-          setState({ loading: false, needsUsername: true, notAdmin: false });
+          setState({ loading: false, needsUsername: true, notAdmin: false, loadError: false });
           return;
         }
 
         setAuthState({ user, profile, isAdmin: admin, loading: false, initialized: true });
-        setState({ loading: false, needsUsername: false, notAdmin: false });
+        setState({ loading: false, needsUsername: false, notAdmin: false, loadError: false });
         unsubscribeNotifications = subscribeToNotifications(user.uid, setNotifications);
 
         const connectedUIDs = await getConnectedUIDs(user.uid);
@@ -75,10 +76,12 @@ export default function AuthProvider({ children, requireAdmin = false }: Props) 
           return;
         }
         unsubscribeChats = subscribeToUnreadChatCount(user.uid, connectedUIDs, setUnreadChatCount);
-      } catch {
+      } catch (err) {
         if (disposed || currentGeneration !== generation) return;
+        // Never silently render the app with a null profile — surface the failure instead.
+        console.error("AuthProvider: failed to load user profile/admin claim", err);
         setAuthState({ user, profile: null, isAdmin: false, loading: false, initialized: true });
-        setState({ loading: false, needsUsername: false, notAdmin: false });
+        setState({ loading: false, needsUsername: false, notAdmin: false, loadError: true });
       }
     });
 
@@ -91,6 +94,16 @@ export default function AuthProvider({ children, requireAdmin = false }: Props) 
   }, [requireAdmin]);
 
   if (state.loading) return <ShimmerSkeleton variant="auth" />;
+
+  if (state.loadError) {
+    return (
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: "100vh", flexDirection: "column", gap: 16 }}>
+        <h2 style={{ color: "var(--error)", margin: 0 }}>Couldn't load your account</h2>
+        <p style={{ color: "var(--text-secondary)" }}>Check your internet connection and try again.</p>
+        <button className="btn btn-ghost" onClick={() => window.location.reload()}>Retry</button>
+      </div>
+    );
+  }
 
   if (state.notAdmin) {
     return (
