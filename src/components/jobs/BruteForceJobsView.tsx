@@ -333,6 +333,7 @@ export default function BruteForceJobsView() {
   const auth = useStore($auth);
   const [leads, setLeads] = useState<BruteForceJob[]>([]);
   const [routeJobIds, setRouteJobIds] = useState<Set<string>>(() => new Set());
+  const [existingJobIds, setExistingJobIds] = useState<Set<string>>(() => new Set());
   const [activeSection, setActiveSection] = useState<LeadSection>("active");
   const [loading, setLoading] = useState(true);
   const [form, setForm] = useState(INITIAL_FORM);
@@ -354,6 +355,7 @@ export default function BruteForceJobsView() {
       setLoading(false);
     });
     const unsubscribeRouteJobs = subscribeToUserJobs(auth.user.uid, jobs => {
+      setExistingJobIds(new Set(jobs.map(job => job.id)));
       setRouteJobIds(new Set(jobs.filter(job => job.onRoute === true).map(job => job.id)));
     });
     return () => {
@@ -552,7 +554,13 @@ export default function BruteForceJobsView() {
 
     setBusyId(lead.id);
     try {
-      await addBruteForceJobToRoute(lead, auth.user.uid, auth.profile.username);
+      const routeJobId = bruteForceRouteJobId(auth.user.uid, lead.id);
+      await addBruteForceJobToRoute(
+        lead,
+        auth.user.uid,
+        auth.profile.username,
+        existingJobIds.has(routeJobId)
+      );
       showToast("Walk-in Route mein add ho gaya. Route status alag track hoga.", "success");
     } catch (err: any) {
       showToast(err.message ?? "Walk-in Route mein add nahi ho paya.", "error");

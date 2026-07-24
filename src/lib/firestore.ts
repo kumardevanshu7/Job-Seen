@@ -312,16 +312,15 @@ export function bruteForceRouteJobId(ownerUID: string, leadId: string): string {
 export async function addBruteForceJobToRoute(
   lead: BruteForceJob,
   ownerUID: string,
-  ownerUsername: string
+  ownerUsername: string,
+  routeJobExists: boolean
 ): Promise<string> {
   if (lead.ownerUID !== ownerUID) throw new Error("Only the lead owner can add it to a route.");
 
   const routeRef = doc(db, "jobs", bruteForceRouteJobId(ownerUID, lead.id));
-  try {
+  if (routeJobExists) {
     await updateDoc(routeRef, { onRoute: true, routeOrder: Date.now() });
     return routeRef.id;
-  } catch (error: any) {
-    if (error?.code !== "not-found") throw error;
   }
 
   await setDoc(routeRef, buildJobPayload(ownerUID, ownerUsername, {
