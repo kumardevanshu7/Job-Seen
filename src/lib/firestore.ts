@@ -243,12 +243,20 @@ export async function deleteJob(jobId: string): Promise<void> {
 
 // ─── Brute Force Job Leads ────────────────────────────────────────────────────
 
-export async function createBruteForceJob(
+export interface BruteForceJobInput {
+  company: string;
+  phone?: string;
+  location: string;
+  mapLink: string;
+  role: string;
+}
+
+function buildBruteForceJobPayload(
   ownerUID: string,
   ownerUsername: string,
-  data: { company: string; phone?: string; location: string; mapLink: string; role: string }
-): Promise<string> {
-  const ref = await addDoc(collection(db, "bruteForceJobs"), {
+  data: BruteForceJobInput
+) {
+  return {
     ownerUID,
     ownerUsername,
     company: data.company.trim().slice(0, 200),
@@ -264,8 +272,37 @@ export async function createBruteForceJob(
     interviewRescheduledAt: null,
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
-  });
+  };
+}
+
+export async function createBruteForceJob(
+  ownerUID: string,
+  ownerUsername: string,
+  data: BruteForceJobInput
+): Promise<string> {
+  const ref = await addDoc(
+    collection(db, "bruteForceJobs"),
+    buildBruteForceJobPayload(ownerUID, ownerUsername, data)
+  );
   return ref.id;
+}
+
+export async function createBruteForceJobs(
+  ownerUID: string,
+  ownerUsername: string,
+  rows: BruteForceJobInput[]
+): Promise<number> {
+  if (rows.length === 0 || rows.length > 100) {
+    throw new Error("JSON import must contain between 1 and 100 jobs.");
+  }
+
+  const batch = writeBatch(db);
+  rows.forEach(row => {
+    const ref = doc(collection(db, "bruteForceJobs"));
+    batch.set(ref, buildBruteForceJobPayload(ownerUID, ownerUsername, row));
+  });
+  await batch.commit();
+  return rows.length;
 }
 
 export function subscribeToBruteForceJobs(

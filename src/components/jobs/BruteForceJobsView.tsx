@@ -3,6 +3,7 @@ import { useStore } from "@nanostores/react";
 import { $auth } from "../../stores/authStore";
 import {
   createBruteForceJob,
+  createBruteForceJobs,
   recordBruteForceCallOutcome,
   rescheduleBruteForceInterview,
   setBruteForceDecision,
@@ -10,21 +11,116 @@ import {
   type BruteForceCallOutcome,
   type BruteForceDecision,
   type BruteForceJob,
+  type BruteForceJobInput,
   type InterviewMode,
 } from "../../lib/firestore";
 import { safeExternalUrl } from "../../lib/security";
 import { ToastProvider, showToast } from "../ui/Toast";
 import ShimmerSkeleton from "../ui/ShimmerSkeleton";
 
-const OUTCOMES: { value: BruteForceCallOutcome; label: string; color: string; bg: string }[] = [
-  { value: "not_called", label: "Not called", color: "#686262", bg: "#f1eeee" },
-  { value: "no_response", label: "No response", color: "#6d28d9", bg: "#f5f3ff" },
-  { value: "wrong_number", label: "Wrong number", color: "#b91c1c", bg: "#fef2f2" },
-  { value: "no_vacancies", label: "No vacancies", color: "#b45309", bg: "#fffbeb" },
-  { value: "success", label: "Success — interview scheduled", color: "#15803d", bg: "#f0fdf4" },
+type DisplayStatus = BruteForceCallOutcome | Exclude<BruteForceDecision, "pending">;
+
+type StatusMeta = {
+  label: string;
+  color: string;
+  bg: string;
+  border: string;
+};
+
+const STATUS_STYLES: Record<DisplayStatus, StatusMeta> = {
+  not_called: { label: "Not called", color: "#57534e", bg: "#f5f5f4", border: "#d6d3d1" },
+  no_response: { label: "No response", color: "#6d28d9", bg: "#f5f3ff", border: "#ddd6fe" },
+  wrong_number: { label: "Wrong number", color: "#be123c", bg: "#fff1f2", border: "#fecdd3" },
+  no_vacancies: { label: "No vacancies", color: "#b45309", bg: "#fffbeb", border: "#fde68a" },
+  success: { label: "Success — interview scheduled", color: "#15803d", bg: "#f0fdf4", border: "#bbf7d0" },
+  selected: { label: "Selected", color: "#1d4ed8", bg: "#eff6ff", border: "#bfdbfe" },
+  rejected: { label: "Rejected", color: "#b91c1c", bg: "#fef2f2", border: "#fecaca" },
+};
+
+const OUTCOME_VALUES: BruteForceCallOutcome[] = [
+  "not_called", "no_response", "wrong_number", "no_vacancies", "success",
+];
+const OUTCOMES = OUTCOME_VALUES.map(value => ({ value, ...STATUS_STYLES[value] }));
+const STATUS_LEGEND: DisplayStatus[] = [
+  "not_called", "no_response", "wrong_number", "no_vacancies", "success", "selected", "rejected",
 ];
 
 const INITIAL_FORM = { company: "", phone: "", location: "", mapLink: "", role: "" };
+const MAX_IMPORT_FILE_BYTES = 1024 * 1024;
+const MAX_IMPORT_ROWS = 100;
+
+const IMPORT_ALIASES = {
+  company: ["company", "companyName", "company_name", "company name"],
+  phone: ["phone", "phoneNumber", "phone_number", "phone number"],
+  location: ["location"],
+  mapLink: ["mapLink", "map_link", "map link", "map"],
+  role: ["role"],
+} as const;
+
+const IMPORT_KEYS: Set<string> = new Set(Object.values(IMPORT_ALIASES).flat());
+
+function importString(
+  row: Record<string, unknown>,
+  aliases: readonly string[],
+  label: string,
+  rowNumber: number,
+  optional = false
+): string {
+  const matchingKeys = aliases.filter(key => Object.prototype.hasOwnProperty.call(row, key));
+  if (matchingKeys.length > 1) {
+    throw new Error(`Row ${rowNumber}: ${label} ek se zyada keys mein diya gaya hai.`);
+  }
+  if (matchingKeys.length === 0) {
+    if (optional) return "";
+    throw new Error(`Row ${rowNumber}: ${label} missing hai.`);
+  }
+
+  const value = row[matchingKeys[0]];
+  if (typeof value !== "string") {
+    throw new Error(`Row ${rowNumber}: ${label} string hona chahiye.`);
+  }
+  const trimmed = value.trim();
+  if (!optional && !trimmed) throw new Error(`Row ${rowNumber}: ${label} empty nahi ho sakta.`);
+  return trimmed;
+}
+
+function parseImportRows(contents: string): BruteForceJobInput[] {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(contents);
+  } catch {
+    throw new Error("Invalid JSON file. File ka JSON syntax check karo.");
+  }
+
+  if (!Array.isArray(parsed)) throw new Error("JSON ka top level array [...] hona chahiye.");
+  if (parsed.length === 0) throw new Error("JSON file mein kam se kam 1 job honi chahiye.");
+  if (parsed.length > MAX_IMPORT_ROWS) throw new Error(`Ek file mein maximum ${MAX_IMPORT_ROWS} jobs import kar sakte ho.`);
+
+  return parsed.map((value, index) => {
+    const rowNumber = index + 1;
+    if (!value || typeof value !== "object" || Array.isArray(value)) {
+      throw new Error(`Row ${rowNumber}: har job ek JSON object honi chahiye.`);
+    }
+    const row = value as Record<string, unknown>;
+    const unknownKey = Object.keys(row).find(key => !IMPORT_KEYS.has(key));
+    if (unknownKey) throw new Error(`Row ${rowNumber}: unknown field “${unknownKey}”.`);
+
+    const company = importString(row, IMPORT_ALIASES.company, "company", rowNumber);
+    const role = importString(row, IMPORT_ALIASES.role, "role", rowNumber);
+    const phone = importString(row, IMPORT_ALIASES.phone, "phone", rowNumber, true);
+    const location = importString(row, IMPORT_ALIASES.location, "location", rowNumber);
+    const rawMapLink = importString(row, IMPORT_ALIASES.mapLink, "map link", rowNumber);
+    const mapLink = safeExternalUrl(rawMapLink);
+
+    if (company.length > 200) throw new Error(`Row ${rowNumber}: company maximum 200 characters ho sakti hai.`);
+    if (role.length > 200) throw new Error(`Row ${rowNumber}: role maximum 200 characters ho sakta hai.`);
+    if (phone.length > 30) throw new Error(`Row ${rowNumber}: phone maximum 30 characters ho sakta hai.`);
+    if (location.length > 300) throw new Error(`Row ${rowNumber}: location maximum 300 characters ho sakti hai.`);
+    if (!mapLink) throw new Error(`Row ${rowNumber}: map link valid https:// URL hona chahiye.`);
+
+    return { company, role, phone, location, mapLink };
+  });
+}
 
 function toMillis(value: any): number {
   if (!value) return 0;
@@ -67,25 +163,26 @@ interface LeadCardProps {
 
 function LeadCard(props: LeadCardProps) {
   const { lead, now, busy } = props;
-  const outcome = OUTCOMES.find(item => item.value === lead.callOutcome) ?? OUTCOMES[0];
+  const isFinal = lead.decision !== "pending";
+  const statusKey: DisplayStatus = isFinal ? lead.decision as Exclude<BruteForceDecision, "pending"> : lead.callOutcome;
+  const status = STATUS_STYLES[statusKey];
   const safeMapLink = safeExternalUrl(lead.mapLink);
   const successAt = toMillis(lead.successAt);
   const interviewAt = toMillis(lead.interviewAt);
   const canReschedule = lead.callOutcome === "success" && !!successAt && now >= successAt + 24 * 60 * 60 * 1000;
   const canFinalize = lead.callOutcome === "success" && !!interviewAt && now >= interviewAt;
-  const isFinal = lead.decision !== "pending";
   const phoneHref = lead.phone ? `tel:${lead.phone.replace(/[^\d+]/g, "")}` : null;
 
   return (
-    <article style={{ border: "1px solid var(--hairline-strong)", borderRadius: 10, padding: 18, background: "var(--canvas)" }}>
+    <article style={{ border: `1px solid ${status.border}`, borderRadius: 10, padding: 18, background: status.bg }}>
       <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "flex-start", flexWrap: "wrap" }}>
         <div>
           <div style={{ fontSize: 16, fontWeight: 750, color: "var(--ink)" }}>{lead.company}</div>
           <div style={{ fontSize: 13, color: "var(--body)", marginTop: 3 }}>{lead.role}</div>
           <div style={{ fontSize: 12, color: "var(--mute)", marginTop: 5 }}>{lead.location}</div>
         </div>
-        <span style={{ color: outcome.color, background: outcome.bg, borderRadius: 999, padding: "5px 9px", fontSize: 11, fontWeight: 700 }}>
-          {isFinal ? lead.decision.toUpperCase() : outcome.label}
+        <span style={{ color: status.color, background: "var(--canvas)", border: `1px solid ${status.border}`, borderRadius: 999, padding: "5px 9px", fontSize: 11, fontWeight: 700 }}>
+          {status.label}
         </span>
       </div>
 
@@ -198,6 +295,25 @@ function LeadCard(props: LeadCardProps) {
 }
 
 type LeadSection = "active" | "selected" | "rejected";
+type ImportStage = "reading" | "validating" | "uploading" | "complete" | "error";
+
+type ImportProgress = {
+  stage: ImportStage;
+  title: string;
+  message: string;
+};
+
+const IMPORT_PROGRESS_PERCENT: Record<ImportStage, number> = {
+  reading: 20,
+  validating: 50,
+  uploading: 80,
+  complete: 100,
+  error: 100,
+};
+
+function waitForNextPaint(): Promise<void> {
+  return new Promise(resolve => requestAnimationFrame(() => resolve()));
+}
 
 export default function BruteForceJobsView() {
   const auth = useStore($auth);
@@ -206,6 +322,7 @@ export default function BruteForceJobsView() {
   const [loading, setLoading] = useState(true);
   const [form, setForm] = useState(INITIAL_FORM);
   const [creating, setCreating] = useState(false);
+  const [importing, setImporting] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [now, setNow] = useState(Date.now());
 
@@ -283,6 +400,41 @@ export default function BruteForceJobsView() {
     }
   }
 
+  async function handleImport(event: React.ChangeEvent<HTMLInputElement>) {
+    const input = event.currentTarget;
+    const file = input.files?.[0];
+    if (!file) return;
+
+    if (!auth.user || !auth.profile) {
+      showToast("Not logged in.", "error");
+      input.value = "";
+      return;
+    }
+    if (!file.name.toLowerCase().endsWith(".json")) {
+      showToast("Sirf .json file upload karo.", "error");
+      input.value = "";
+      return;
+    }
+    if (file.size > MAX_IMPORT_FILE_BYTES) {
+      showToast("JSON file maximum 1 MB ho sakti hai.", "error");
+      input.value = "";
+      return;
+    }
+
+    setImporting(true);
+    try {
+      const rows = parseImportRows(await file.text());
+      const importedCount = await createBruteForceJobs(auth.user.uid, auth.profile.username, rows);
+      setActiveSection("active");
+      showToast(`${importedCount} leads import ho gayi.`, "success");
+    } catch (err: any) {
+      showToast(err.message ?? "JSON import failed.", "error");
+    } finally {
+      setImporting(false);
+      input.value = "";
+    }
+  }
+
   function openSchedule(lead: BruteForceJob, action: "success" | "reschedule") {
     setScheduleId(lead.id);
     setScheduleAction(action);
@@ -349,6 +501,54 @@ export default function BruteForceJobsView() {
         <p className="page-subtitle">
           AI se company list nikalo, phone number pe call milao, aur yahan track karo — no response, wrong number, no vacancies, ya interview mil gaya.
         </p>
+      </div>
+
+      <div style={{ marginBottom: 26 }}>
+        <div className="section-label" style={{ marginBottom: 12 }}>Status color guide</div>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+          {STATUS_LEGEND.map(statusKey => {
+            const item = STATUS_STYLES[statusKey];
+            return (
+              <span
+                key={statusKey}
+                style={{
+                  color: item.color,
+                  background: item.bg,
+                  border: `1px solid ${item.border}`,
+                  borderRadius: 999,
+                  padding: "6px 10px",
+                  fontSize: 11,
+                  fontWeight: 700,
+                }}
+              >
+                {item.label}
+              </span>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="form-card" style={{ marginBottom: 20, maxWidth: 620 }}>
+        <div style={{ fontSize: 15, fontWeight: 750, color: "var(--ink)" }}>Import jobs from JSON</div>
+        <p className="form-hint" style={{ marginTop: 6 }}>
+          Maximum 100 jobs aur 1 MB file. Har imported card “Not called” status se start hoga.
+        </p>
+        <pre style={{ margin: "12px 0", padding: 10, overflowX: "auto", borderRadius: 6, background: "var(--surface-soft)", color: "var(--body)", fontSize: 10, lineHeight: 1.5 }}>
+          {`[{"company":"TCS","role":"Developer","phone":"+91 98765 43210","location":"Noida","mapLink":"https://maps.google.com/..."}]`}
+        </pre>
+        <label
+          className="btn btn-secondary"
+          style={{ opacity: importing ? 0.6 : 1, cursor: importing ? "wait" : "pointer" }}
+        >
+          {importing ? "Importing…" : "Choose JSON file"}
+          <input
+            type="file"
+            accept=".json,application/json"
+            disabled={importing}
+            onChange={handleImport}
+            style={{ display: "none" }}
+          />
+        </label>
       </div>
 
       <form onSubmit={handleCreate} className="form-card" style={{ marginBottom: 32, maxWidth: 620 }}>
