@@ -215,13 +215,12 @@ export default function SettingsView() {
                 />
               </div>
               <div className="form-group">
-                <label className="form-label">answer (minimum 8 characters)</label>
+                <label className="form-label">answer</label>
                 <input
                   className="form-input"
                   type="password"
                   autoComplete="new-password"
                   value={answer}
-                  maxLength={128}
                   onChange={event => setAnswer(event.target.value)}
                   placeholder="Your private answer"
                 />
@@ -244,15 +243,15 @@ export default function SettingsView() {
                 <form onSubmit={changeProtection} style={{ display: "flex", flexDirection: "column", gap: 14, marginTop: 16 }}>
                   <div className="form-group">
                     <label className="form-label">current answer</label>
-                    <input className="form-input" type="password" autoComplete="current-password" value={currentAnswer} maxLength={128} onChange={event => setCurrentAnswer(event.target.value)} />
+                    <input className="form-input" type="password" autoComplete="current-password" value={currentAnswer} onChange={event => setCurrentAnswer(event.target.value)} />
                   </div>
                   <div className="form-group">
                     <label className="form-label">new question</label>
                     <input className="form-input" value={nextQuestion} maxLength={160} onChange={event => setNextQuestion(event.target.value)} />
                   </div>
                   <div className="form-group">
-                    <label className="form-label">new answer (minimum 8 characters)</label>
-                    <input className="form-input" type="password" autoComplete="new-password" value={nextAnswer} maxLength={128} onChange={event => setNextAnswer(event.target.value)} />
+                    <label className="form-label">new answer</label>
+                    <input className="form-input" type="password" autoComplete="new-password" value={nextAnswer} onChange={event => setNextAnswer(event.target.value)} />
                   </div>
                   <div>
                     <button type="submit" className="btn btn-primary" disabled={savingProtection || !currentAnswer.trim() || !nextQuestion.trim() || !nextAnswer.trim()}>

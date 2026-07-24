@@ -18,8 +18,6 @@ export interface DeletionQuestion {
 
 const QUESTION_MIN_LENGTH = 5;
 const QUESTION_MAX_LENGTH = 160;
-const ANSWER_MIN_LENGTH = 8;
-const ANSWER_MAX_LENGTH = 128;
 
 function collapseWhitespace(value: string): string {
   const compatible = value.normalize("NFKC");
@@ -39,8 +37,8 @@ export function normalizeDeletionQuestion(value: string): string {
 
 export function normalizeDeletionAnswer(value: string): string {
   const normalized = collapseWhitespace(value).toLocaleLowerCase("en-US");
-  if (normalized.length < ANSWER_MIN_LENGTH || normalized.length > ANSWER_MAX_LENGTH) {
-    throw new Error(`Answer ${ANSWER_MIN_LENGTH}–${ANSWER_MAX_LENGTH} characters ka hona chahiye.`);
+  if (!normalized) {
+    throw new Error("Answer empty nahi ho sakta.");
   }
   return normalized;
 }

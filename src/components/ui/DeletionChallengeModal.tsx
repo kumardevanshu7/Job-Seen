@@ -93,7 +93,6 @@ export default function DeletionChallengeModal({
                 type={showAnswer ? "text" : "password"}
                 autoComplete="off"
                 value={answer}
-                maxLength={128}
                 disabled={busy}
                 onChange={event => setAnswer(event.target.value)}
                 placeholder="Your answer"
