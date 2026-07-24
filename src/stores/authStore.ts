@@ -5,6 +5,7 @@ import type { UserProfile } from "../lib/firestore";
 export interface AuthState {
   user: User | null;
   profile: UserProfile | null;
+  isAdmin: boolean;
   loading: boolean;
   initialized: boolean;
 }
@@ -12,6 +13,7 @@ export interface AuthState {
 export const $auth = atom<AuthState>({
   user: null,
   profile: null,
+  isAdmin: false,
   loading: true,
   initialized: false,
 });

@@ -6,6 +6,7 @@ import type { JobCard as JobCardType, JobStatus } from "../../lib/firestore";
 import { showToast } from "../ui/Toast";
 import { serverTimestamp } from "firebase/firestore";
 import ReasonModal from "../ui/ReasonModal";
+import { safeExternalUrl } from "../../lib/security";
 
 interface Props {
   job: JobCardType;
@@ -436,8 +437,8 @@ export default function JobCard({ job, showCopy = true, isOwner = false, onDelet
               {onRoute ? "On Route ✓" : "+ Route"}
             </button>
           )}
-          {job.applyLink?.trim() && (
-            <a href={job.applyLink} target="_blank" rel="noopener noreferrer"
+          {safeExternalUrl(job.applyLink) && (
+            <a href={safeExternalUrl(job.applyLink)!} target="_blank" rel="noopener noreferrer"
               style={{ background: "var(--ink,#201d1d)", color: "var(--canvas,#fdfcfc)", padding: "6px 14px", borderRadius: 3, fontSize: 12, fontWeight: 700, textDecoration: "none" }}
               onClick={(e) => { e.stopPropagation(); if (isOwner && status === "pending") setStatus("applied"); }}
             >

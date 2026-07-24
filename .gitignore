@@ -19,6 +19,9 @@ pnpm-debug.log*
 .env.local
 .env.*.local
 
+# Firebase Admin SDK service account key — NEVER commit this
+scripts/serviceAccountKey.json
+
 # macOS-specific files
 .DS_Store
 

@@ -1,21 +1,20 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useStore } from "@nanostores/react";
-import { $auth, setAuthState } from "../../stores/authStore";
+import { $auth } from "../../stores/authStore";
 import {
   subscribeToUserJobs,
   updateJobStatus,
   updateJobRouteOrder,
   deleteJob,
   setJobOnRoute,
-  setUserDeletePin,
-  verifyUserDeletePin,
   type JobCard as JobCardType,
   type JobStatus,
 } from "../../lib/firestore";
 import { showToast, ToastProvider } from "../ui/Toast";
 import ReasonModal from "../ui/ReasonModal";
-import DeletePinModal from "../ui/DeletePinModal";
+import ConfirmModal from "../ui/ConfirmModal";
 import ShimmerSkeleton from "../ui/ShimmerSkeleton";
+import { safeExternalUrl } from "../../lib/security";
 
 const WALKIN_STATUS: Record<
   "pending" | "interview_done" | "rejected" | "fraud" | "cancelled",
@@ -55,7 +54,6 @@ export default function WalkInRouteView() {
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
 
-  const hasDeletePin = !!auth.profile?.deletePinHash;
   const itemRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const flipRef = useRef<{
     a: string;
@@ -194,17 +192,8 @@ export default function WalkInRouteView() {
     }
   }
 
-  async function confirmDeleteWithPin(pin: string) {
+  async function confirmDelete() {
     if (!deleteTarget || !auth.user) return;
-    if (!hasDeletePin) {
-      const hash = await setUserDeletePin(auth.user.uid, pin);
-      setAuthState({
-        profile: auth.profile ? { ...auth.profile, deletePinHash: hash } : auth.profile,
-      });
-    } else {
-      const ok = await verifyUserDeletePin(auth.user.uid, pin, auth.profile?.deletePinHash);
-      if (!ok) throw new Error("Galat code. Dobara try karo.");
-    }
     await deleteJob(deleteTarget);
     showToast("Job deleted.", "info");
     setDeleteTarget(null);
@@ -232,11 +221,13 @@ export default function WalkInRouteView() {
       )}
 
       {deleteTarget && (
-        <DeletePinModal
-          mode={hasDeletePin ? "verify" : "setup"}
-          confirmLabel={hasDeletePin ? "Delete" : "Set & Delete"}
+        <ConfirmModal
+          title="Delete this job?"
+          message="This permanently removes the job. Only its Firebase-authenticated owner can complete this action."
+          confirmLabel="Delete"
+          danger
           onCancel={() => setDeleteTarget(null)}
-          onConfirm={confirmDeleteWithPin}
+          onConfirm={confirmDelete}
         />
       )}
 
@@ -535,9 +526,9 @@ export default function WalkInRouteView() {
                   </div>
                   {(job.mapLink || job.applyLink) && (
                     <div style={{ marginTop: 8, display: "flex", gap: 10, flexWrap: "wrap" }}>
-                      {job.mapLink && (
+                      {safeExternalUrl(job.mapLink) && (
                         <a
-                          href={job.mapLink}
+                          href={safeExternalUrl(job.mapLink)!}
                           target="_blank"
                           rel="noopener noreferrer"
                           onClick={e => e.stopPropagation()}
@@ -546,9 +537,9 @@ export default function WalkInRouteView() {
                           Open map →
                         </a>
                       )}
-                      {job.applyLink && (
+                      {safeExternalUrl(job.applyLink) && (
                         <a
-                          href={job.applyLink}
+                          href={safeExternalUrl(job.applyLink)!}
                           target="_blank"
                           rel="noopener noreferrer"
                           onClick={e => e.stopPropagation()}

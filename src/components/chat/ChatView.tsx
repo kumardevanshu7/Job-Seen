@@ -73,10 +73,9 @@ export default function ChatView() {
 
   useEffect(() => {
     if (!auth.user || !activeUser) return;
-    const chatId = getChatId(auth.user.uid, activeUser.uid);
-    const unsub = subscribeToMessages(chatId, msgs => {
+    const unsub = subscribeToMessages(auth.user.uid, activeUser.uid, msgs => {
       setMessages(msgs);
-      markMessagesRead(chatId, auth.user!.uid).catch(() => {});
+      markMessagesRead(auth.user!.uid, activeUser.uid, auth.user!.uid).catch(() => {});
     });
     return () => unsub();
   }, [activeUser, auth.user]);
@@ -89,8 +88,7 @@ export default function ChatView() {
     if (!auth.user || !auth.profile || !activeUser || !text.trim()) return;
     setSending(true);
     try {
-      const chatId = getChatId(auth.user.uid, activeUser.uid);
-      await sendMessage(chatId, auth.user.uid, auth.profile.username, text);
+      await sendMessage(auth.user.uid, activeUser.uid, auth.profile.username, text);
       setText("");
       setShowPicker(false);
       inputRef.current?.focus();

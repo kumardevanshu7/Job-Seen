@@ -13,9 +13,12 @@ import {
   onSnapshot,
   serverTimestamp,
   limit,
+  runTransaction,
+  writeBatch,
   type Unsubscribe,
 } from "firebase/firestore";
 import { db } from "./firebase";
+import { canonicalPairId, requireSafeExternalUrl } from "./security";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -23,10 +26,9 @@ export interface UserProfile {
   uid: string;
   displayName: string;
   username: string;
-  email: string;
-  photoURL?: string;
+  photoURL?: string | null;
   createdAt: any;
-  deletePinHash?: string;
+  updatedAt?: any;
 }
 
 export type JobType = 'online' | 'walkin';
@@ -78,11 +80,42 @@ export interface JobCard {
   ppo?: string;                    // "yes" | "no" | "maybe" | ""
 }
 
+export interface BruteForceJob {
+  id: string;
+  ownerUID: string;
+  ownerUsername: string;
+  company: string;
+  phone: string;
+  location: string;
+  mapLink: string;
+  role: string;
+  callOutcome: BruteForceCallOutcome;
+  decision: BruteForceDecision;
+  successAt: any | null;
+  interviewMode: InterviewMode | null;
+  interviewAt: any | null;
+  interviewRescheduledAt: any | null;
+  createdAt: any;
+  updatedAt: any;
+}
+
+export type BruteForceCallOutcome =
+  | "not_called"
+  | "no_response"
+  | "wrong_number"
+  | "no_vacancies"
+  | "success";
+
+export type InterviewMode = "offline" | "online";
+export type BruteForceDecision = "pending" | "selected" | "rejected";
+
 export interface Connection {
   id: string;
   userA: string;
   userB: string;
   connectedAt: any;
+  requestId?: string;
+  legacyConnectionId?: string;
 }
 
 export interface Notification {
@@ -106,13 +139,21 @@ export interface Permission {
 
 // ─── Jobs ─────────────────────────────────────────────────────────────────────
 
-export async function createJob(
+function buildJobPayload(
   ownerUID: string,
   ownerUsername: string,
   data: Omit<JobCard, "id" | "ownerUID" | "ownerUsername" | "createdAt">
-): Promise<string> {
+) {
+  const applyLink = data.applyLink?.trim()
+    ? requireSafeExternalUrl(data.applyLink, "Apply link")
+    : "";
+  const mapLink = data.mapLink?.trim()
+    ? requireSafeExternalUrl(data.mapLink, "Map link")
+    : "";
   const payload: any = {
     ...data,
+    applyLink,
+    mapLink,
     ownerUID,
     ownerUsername,
     copiedFromUID: data.copiedFromUID ?? null,
@@ -121,7 +162,15 @@ export async function createJob(
     createdAt: serverTimestamp(),
   };
   Object.keys(payload).forEach(key => payload[key] === undefined && delete payload[key]);
-  const ref = await addDoc(collection(db, "jobs"), payload);
+  return payload;
+}
+
+export async function createJob(
+  ownerUID: string,
+  ownerUsername: string,
+  data: Omit<JobCard, "id" | "ownerUID" | "ownerUsername" | "createdAt">
+): Promise<string> {
+  const ref = await addDoc(collection(db, "jobs"), buildJobPayload(ownerUID, ownerUsername, data));
   return ref.id;
 }
 
@@ -164,29 +213,19 @@ export async function copyJob(
   targetUID: string,
   targetUsername: string
 ): Promise<string> {
-  // ── Duplicate check ──────────────────────────────────────────────
-  // Check if user already copied this exact job (by original owner + company + role)
-  const dupQ = query(
-    collection(db, "jobs"),
-    where("ownerUID", "==", targetUID),
-    where("copiedFromUID", "==", sourceJob.ownerUID),
-    limit(10)
-  );
-  const dupSnap = await getDocs(dupQ);
-  const alreadyCopied = dupSnap.docs.some(d => {
-    const data = d.data();
-    return data.company === sourceJob.company && data.role === sourceJob.role;
-  });
-  if (alreadyCopied) {
-    throw new Error("DUPLICATE");
-  }
-  // ─────────────────────────────────────────────────────────────────
+  const copyRef = doc(db, "jobs", `copy_${targetUID}_${sourceJob.id}`);
   const { id, ownerUID, ownerUsername, createdAt, status, appliedAt, reminderDismissedAt, ...rest } = sourceJob;
-  return createJob(targetUID, targetUsername, {
+  const payload = buildJobPayload(targetUID, targetUsername, {
     ...rest,
     copiedFromUID: sourceJob.ownerUID,
     copiedFromUsername: sourceJob.ownerUsername,
   });
+
+  await runTransaction(db, async transaction => {
+    if ((await transaction.get(copyRef)).exists()) throw new Error("DUPLICATE");
+    transaction.set(copyRef, payload);
+  });
+  return copyRef.id;
 }
 
 export async function getJobById(jobId: string): Promise<JobCard | null> {
@@ -197,6 +236,132 @@ export async function getJobById(jobId: string): Promise<JobCard | null> {
 
 export async function deleteJob(jobId: string): Promise<void> {
   await deleteDoc(doc(db, "jobs", jobId));
+}
+
+// ─── Brute Force Job Leads ────────────────────────────────────────────────────
+
+export async function createBruteForceJob(
+  ownerUID: string,
+  ownerUsername: string,
+  data: { company: string; phone?: string; location: string; mapLink: string; role: string }
+): Promise<string> {
+  const ref = await addDoc(collection(db, "bruteForceJobs"), {
+    ownerUID,
+    ownerUsername,
+    company: data.company.trim().slice(0, 200),
+    phone: data.phone?.trim().slice(0, 30) ?? "",
+    location: data.location.trim().slice(0, 300),
+    mapLink: requireSafeExternalUrl(data.mapLink, "Map link"),
+    role: data.role.trim().slice(0, 200),
+    callOutcome: "not_called",
+    decision: "pending",
+    successAt: null,
+    interviewMode: null,
+    interviewAt: null,
+    interviewRescheduledAt: null,
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  });
+  return ref.id;
+}
+
+export function subscribeToBruteForceJobs(
+  uid: string,
+  callback: (jobs: BruteForceJob[]) => void
+): Unsubscribe {
+  const q = query(collection(db, "bruteForceJobs"), where("ownerUID", "==", uid));
+  return onSnapshot(q, snapshot => {
+    const jobs = snapshot.docs.map(item => ({ id: item.id, ...item.data() } as BruteForceJob));
+    jobs.sort((a, b) => {
+      const aTime = a.createdAt?.toMillis?.() ?? a.createdAt?.seconds * 1000 ?? 0;
+      const bTime = b.createdAt?.toMillis?.() ?? b.createdAt?.seconds * 1000 ?? 0;
+      return bTime - aTime;
+    });
+    callback(jobs);
+  });
+}
+
+export async function recordBruteForceCallOutcome(
+  jobId: string,
+  outcome: BruteForceCallOutcome,
+  interview?: { mode: InterviewMode; at: Date }
+): Promise<void> {
+  const jobRef = doc(db, "bruteForceJobs", jobId);
+  await runTransaction(db, async transaction => {
+    const snapshot = await transaction.get(jobRef);
+    if (!snapshot.exists()) throw new Error("Lead not found.");
+    const current = snapshot.data();
+    if (current.decision !== "pending") throw new Error("Final result cannot be changed.");
+
+    if (outcome === "success") {
+      if (!interview || Number.isNaN(interview.at.getTime()) || interview.at.getTime() <= Date.now()) {
+        throw new Error("Choose a future interview date and time.");
+      }
+      transaction.update(jobRef, {
+        callOutcome: outcome,
+        successAt: serverTimestamp(),
+        interviewMode: interview.mode,
+        interviewAt: interview.at,
+        interviewRescheduledAt: null,
+        updatedAt: serverTimestamp(),
+      });
+      return;
+    }
+
+    transaction.update(jobRef, {
+      callOutcome: outcome,
+      successAt: null,
+      interviewMode: null,
+      interviewAt: null,
+      interviewRescheduledAt: null,
+      updatedAt: serverTimestamp(),
+    });
+  });
+}
+
+
+export async function rescheduleBruteForceInterview(jobId: string, interviewAt: Date): Promise<void> {
+  if (Number.isNaN(interviewAt.getTime()) || interviewAt.getTime() <= Date.now()) {
+    throw new Error("Choose a future interview date and time.");
+  }
+  const jobRef = doc(db, "bruteForceJobs", jobId);
+  await runTransaction(db, async transaction => {
+    const snapshot = await transaction.get(jobRef);
+    if (!snapshot.exists()) throw new Error("Lead not found.");
+    const current = snapshot.data();
+    const successMillis = current.successAt?.toMillis?.() ?? current.successAt?.seconds * 1000 ?? 0;
+    if (current.callOutcome !== "success" || current.decision !== "pending") {
+      throw new Error("Only an active successful lead can be rescheduled.");
+    }
+    if (!successMillis || Date.now() < successMillis + 24 * 60 * 60 * 1000) {
+      throw new Error("Interview date change unlocks 24 hours after success.");
+    }
+    transaction.update(jobRef, {
+      interviewAt,
+      interviewRescheduledAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    });
+  });
+}
+
+export async function setBruteForceDecision(
+  jobId: string,
+  decision: Exclude<BruteForceDecision, "pending">
+): Promise<void> {
+  const jobRef = doc(db, "bruteForceJobs", jobId);
+  await runTransaction(db, async transaction => {
+    const snapshot = await transaction.get(jobRef);
+    if (!snapshot.exists()) throw new Error("Lead not found.");
+    const current = snapshot.data();
+    const interviewMillis = current.interviewAt?.toMillis?.() ?? current.interviewAt?.seconds * 1000 ?? 0;
+    if (current.callOutcome !== "success" || current.decision !== "pending") {
+      throw new Error("This result cannot be changed.");
+    }
+    if (!interviewMillis || Date.now() < interviewMillis) {
+      throw new Error("Final result unlocks after the scheduled interview time.");
+    }
+    transaction.update(jobRef, { decision, updatedAt: serverTimestamp() });
+  });
 }
 
 export async function updateJobStatus(
@@ -214,11 +379,13 @@ export async function updateJobStatus(
 export async function updateJobRouteOrder(
   updates: { id: string; routeOrder: number }[]
 ): Promise<void> {
-  await Promise.all(
-    updates.map(({ id, routeOrder }) =>
-      updateDoc(doc(db, "jobs", id), { routeOrder })
-    )
-  );
+  for (let index = 0; index < updates.length; index += 450) {
+    const batch = writeBatch(db);
+    updates.slice(index, index + 450).forEach(({ id, routeOrder }) => {
+      batch.update(doc(db, "jobs", id), { routeOrder });
+    });
+    await batch.commit();
+  }
 }
 
 export async function setJobOnRoute(
@@ -231,32 +398,8 @@ export async function setJobOnRoute(
   await updateDoc(doc(db, "jobs", jobId), updates);
 }
 
-export async function hashDeletePin(pin: string): Promise<string> {
-  const data = new TextEncoder().encode(`jobseen-pin:${pin}`);
-  const buf = await crypto.subtle.digest("SHA-256", data);
-  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, "0")).join("");
-}
-
-export async function setUserDeletePin(uid: string, pin: string): Promise<string> {
-  const deletePinHash = await hashDeletePin(pin);
-  await updateDoc(doc(db, "users", uid), { deletePinHash });
-  return deletePinHash;
-}
-
-export async function verifyUserDeletePin(uid: string, pin: string, storedHash?: string): Promise<boolean> {
-  let hash = storedHash;
-  if (!hash) {
-    const snap = await getDoc(doc(db, "users", uid));
-    hash = snap.exists() ? (snap.data().deletePinHash as string | undefined) : undefined;
-  }
-  if (!hash) return false;
-  const attempt = await hashDeletePin(pin);
-  return attempt === hash;
-}
-
 
 // ─── Chat ──────────────────────────────────────────────────────────────────────
-
 
 export interface ChatMessage {
   id: string;
@@ -267,57 +410,84 @@ export interface ChatMessage {
   read: boolean;
 }
 
-/** Deterministic chat ID from two UIDs (sorted alphabetically) */
 export function getChatId(uidA: string, uidB: string): string {
-  return [uidA, uidB].sort().join("_");
+  return canonicalPairId(uidA, uidB);
+}
+
+function chatParticipants(uidA: string, uidB: string): [string, string] {
+  return [uidA, uidB].sort() as [string, string];
+}
+
+async function ensureChat(uidA: string, uidB: string): Promise<string> {
+  const chatId = getChatId(uidA, uidB);
+  await setDoc(doc(db, "chats", chatId), {
+    participants: chatParticipants(uidA, uidB),
+  }, { merge: true });
+  return chatId;
 }
 
 export async function sendMessage(
-  chatId: string,
   senderUID: string,
+  receiverUID: string,
   senderUsername: string,
   text: string
 ): Promise<void> {
-  await addDoc(collection(db, "chats", chatId, "messages"), {
+  const cleanText = text.trim();
+  if (!cleanText || cleanText.length > 2000) throw new Error("Message must be 1–2000 characters.");
+  const chatId = getChatId(senderUID, receiverUID);
+  const messageRef = doc(collection(db, "chats", chatId, "messages"));
+  const batch = writeBatch(db);
+  batch.set(doc(db, "chats", chatId), {
+    participants: chatParticipants(senderUID, receiverUID),
+    updatedAt: serverTimestamp(),
+    lastText: cleanText.slice(0, 80),
+    lastSenderUID: senderUID,
+  }, { merge: true });
+  batch.set(messageRef, {
     senderUID,
     senderUsername,
-    text: text.trim(),
+    text: cleanText,
     createdAt: serverTimestamp(),
     read: false,
   });
-  // Update chat metadata for "last message" preview
-  await setDoc(doc(db, "chats", chatId), {
-    updatedAt: serverTimestamp(),
-    lastText: text.trim().slice(0, 80),
-    lastSenderUID: senderUID,
-  }, { merge: true });
+  await batch.commit();
 }
 
 export function subscribeToMessages(
-  chatId: string,
+  uidA: string,
+  uidB: string,
   callback: (msgs: ChatMessage[]) => void
 ): Unsubscribe {
-  const q = query(
-    collection(db, "chats", chatId, "messages"),
-    orderBy("createdAt", "asc"),
-    limit(100)
-  );
-  return onSnapshot(q, snap => {
-    callback(snap.docs.map(d => ({ id: d.id, ...d.data() } as ChatMessage)));
-  });
+  let stopped = false;
+  let unsubscribe: Unsubscribe = () => {};
+  ensureChat(uidA, uidB).then(chatId => {
+    if (stopped) return;
+    const q = query(
+      collection(db, "chats", chatId, "messages"),
+      orderBy("createdAt", "asc"),
+      limit(100)
+    );
+    unsubscribe = onSnapshot(q, snap => {
+      callback(snap.docs.map(d => ({ id: d.id, ...d.data() } as ChatMessage)));
+    });
+  }).catch(() => callback([]));
+  return () => { stopped = true; unsubscribe(); };
 }
 
-export async function markMessagesRead(chatId: string, currentUID: string): Promise<void> {
-  // Only query by `read == false` to avoid composite index requirement.
-  // Filter out own messages client-side.
+export async function markMessagesRead(uidA: string, uidB: string, currentUID: string): Promise<void> {
+  const chatId = getChatId(uidA, uidB);
   const q = query(
     collection(db, "chats", chatId, "messages"),
     where("read", "==", false),
-    limit(50)
+    limit(100)
   );
   const snap = await getDocs(q);
   const toMark = snap.docs.filter(d => d.data().senderUID !== currentUID);
-  await Promise.all(toMark.map(d => updateDoc(d.ref, { read: true })));
+  for (let index = 0; index < toMark.length; index += 450) {
+    const batch = writeBatch(db);
+    toMark.slice(index, index + 450).forEach(message => batch.update(message.ref, { read: true }));
+    await batch.commit();
+  }
 }
 
 export function subscribeToUnreadChatCount(
@@ -327,19 +497,27 @@ export function subscribeToUnreadChatCount(
 ): Unsubscribe[] {
   if (connectedUIDs.length === 0) { callback(0, {}); return []; }
   const counts: Record<string, number> = {};
-  const unsubs = connectedUIDs.map(otherUID => {
+  return connectedUIDs.map(otherUID => {
+    let stopped = false;
+    let unsubscribe: Unsubscribe = () => {};
     const chatId = getChatId(uid, otherUID);
-    const q = query(
-      collection(db, "chats", chatId, "messages"),
-      where("read", "==", false),
-      where("senderUID", "==", otherUID),
-    );
-    return onSnapshot(q, snap => {
-      counts[chatId] = snap.size;
-      callback(Object.values(counts).reduce((a, b) => a + b, 0), counts);
+    ensureChat(uid, otherUID).then(() => {
+      if (stopped) return;
+      const q = query(
+        collection(db, "chats", chatId, "messages"),
+        where("read", "==", false),
+        where("senderUID", "==", otherUID),
+      );
+      unsubscribe = onSnapshot(q, snap => {
+        counts[chatId] = snap.size;
+        callback(Object.values(counts).reduce((a, b) => a + b, 0), { ...counts });
+      });
+    }).catch(() => {
+      counts[chatId] = 0;
+      callback(Object.values(counts).reduce((a, b) => a + b, 0), { ...counts });
     });
+    return () => { stopped = true; unsubscribe(); };
   });
-  return unsubs;
 }
 
 // ─── Users ─────────────────────────────────────────────────────────────────────
@@ -348,27 +526,17 @@ export function subscribeToUnreadChatCount(
 export async function searchUserByUsername(
   username: string
 ): Promise<UserProfile | null> {
-  const q = query(
-    collection(db, "users"),
-    where("username", "==", username.toLowerCase()),
-    limit(1)
-  );
-  const snap = await getDocs(q);
-  if (snap.empty) return null;
-  const d = snap.docs[0];
-  return { uid: d.id, ...d.data() } as UserProfile;
+  const normalized = username.trim().toLowerCase();
+  const usernameSnap = await getDoc(doc(db, "usernames", normalized));
+  if (!usernameSnap.exists()) return null;
+  const profileSnap = await getDoc(doc(db, "publicProfiles", usernameSnap.data().uid));
+  return profileSnap.exists() ? profileSnap.data() as UserProfile : null;
 }
 
 export async function getUsersByUIDs(uids: string[]): Promise<UserProfile[]> {
-  if (uids.length === 0) return [];
-  const profiles: UserProfile[] = [];
-  for (const uid of uids) {
-    const snap = await getDoc(doc(db, "users", uid));
-    if (snap.exists()) {
-      profiles.push({ uid: snap.id, ...snap.data() } as UserProfile);
-    }
-  }
-  return profiles;
+  const uniqueUIDs = [...new Set(uids)].slice(0, 100);
+  const snapshots = await Promise.all(uniqueUIDs.map(uid => getDoc(doc(db, "publicProfiles", uid))));
+  return snapshots.filter(snap => snap.exists()).map(snap => snap.data() as UserProfile);
 }
 
 // ─── Connection Requests ───────────────────────────────────────────────────────
@@ -379,68 +547,95 @@ export async function sendConnectionRequest(
   senderDisplayName: string,
   receiverUID: string
 ): Promise<void> {
-  // Check if already sent or connected
-  const existing = await getDocs(
-    query(
-      collection(db, "friendRequests"),
-      where("senderUID", "==", senderUID),
-      where("receiverUID", "==", receiverUID)
-    )
-  );
-  if (!existing.empty) return;
+  const pairId = canonicalPairId(senderUID, receiverUID);
+  const requestRef = doc(db, "friendRequests", pairId);
+  const connectionRef = doc(db, "connections", pairId);
+  const notificationRef = doc(db, "notifications", pairId);
 
-  const reqRef = await addDoc(collection(db, "friendRequests"), {
-    senderUID,
-    senderUsername,
-    receiverUID,
-    status: "pending",
-    createdAt: serverTimestamp(),
-  });
+  await runTransaction(db, async transaction => {
+    const connectionSnap = await transaction.get(connectionRef);
+    const requestSnap = await transaction.get(requestRef);
+    if (connectionSnap.exists()) return;
+    if (requestSnap.exists()) {
+      if (requestSnap.data().status === "pending" && requestSnap.data().senderUID === senderUID) return;
+      if (requestSnap.data().status === "pending") {
+        throw new Error("This user already sent you a request. Respond from Notifications.");
+      }
+      throw new Error("A previous request already exists for this connection.");
+    }
 
-  // Create notification for receiver
-  await addDoc(collection(db, "notifications"), {
-    receiverUID,
-    senderUID,
-    senderUsername,
-    senderDisplayName,
-    type: "connection_request",
-    requestId: reqRef.id,
-    status: "unread",
-    createdAt: serverTimestamp(),
+    transaction.set(requestRef, {
+      senderUID,
+      receiverUID,
+      status: "pending",
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    });
+    transaction.set(notificationRef, {
+      receiverUID,
+      senderUID,
+      senderUsername,
+      senderDisplayName,
+      type: "connection_request",
+      requestId: pairId,
+      status: "unread",
+      createdAt: serverTimestamp(),
+    });
   });
 }
 
 export async function respondToRequest(
   requestId: string,
+  notificationId: string,
   status: "accepted" | "declined",
-  senderUID: string,
-  receiverUID: string
+  currentUID: string
 ): Promise<void> {
-  await updateDoc(doc(db, "friendRequests", requestId), { status });
+  const requestRef = doc(db, "friendRequests", requestId);
+  const notificationRef = doc(db, "notifications", notificationId);
 
-  if (status === "accepted") {
-    // Create connection document
-    await addDoc(collection(db, "connections"), {
-      userA: senderUID,
-      userB: receiverUID,
-      connectedAt: serverTimestamp(),
-    });
-  }
+  await runTransaction(db, async transaction => {
+    const requestSnap = await transaction.get(requestRef);
+    const notificationSnap = await transaction.get(notificationRef);
+    if (!requestSnap.exists()) throw new Error("Request no longer exists.");
+    const request = requestSnap.data();
+    if (request.receiverUID !== currentUID || request.status !== "pending") {
+      throw new Error("This request cannot be changed.");
+    }
+
+    const connectionRef = doc(db, "connections", canonicalPairId(request.senderUID, request.receiverUID));
+    const connectionSnap = await transaction.get(connectionRef);
+    transaction.update(requestRef, { status, updatedAt: serverTimestamp() });
+    if (status === "accepted" && !connectionSnap.exists()) {
+      transaction.set(connectionRef, {
+        userA: [request.senderUID, request.receiverUID].sort()[0],
+        userB: [request.senderUID, request.receiverUID].sort()[1],
+        requestId,
+        connectedAt: serverTimestamp(),
+      });
+    }
+    if (notificationSnap.exists() && notificationSnap.data().receiverUID === currentUID) {
+      transaction.update(notificationRef, { status: "read" });
+    }
+  });
 }
 
 export async function getRequestStatus(
   senderUID: string,
   receiverUID: string
 ): Promise<"none" | "pending" | "accepted" | "declined"> {
-  const q = query(
+  const connectionSnap = await getDoc(doc(db, "connections", canonicalPairId(senderUID, receiverUID)));
+  if (connectionSnap.exists()) return "accepted";
+  const requestSnap = await getDoc(doc(db, "friendRequests", canonicalPairId(senderUID, receiverUID)));
+  if (requestSnap.exists()) return requestSnap.data().status as "pending" | "accepted" | "declined";
+
+  // Temporary compatibility for legacy random request IDs.
+  const legacy = await getDocs(query(
     collection(db, "friendRequests"),
     where("senderUID", "==", senderUID),
     where("receiverUID", "==", receiverUID),
     limit(1)
-  );
-  const snap = await getDocs(q);
-  if (snap.empty) return "none";
-  return snap.docs[0].data().status as any;
+  ));
+  return legacy.empty ? "none" : legacy.docs[0].data().status;
 }
 
 // ─── Connections ───────────────────────────────────────────────────────────────
@@ -449,50 +644,54 @@ export async function getConnections(uid: string): Promise<Connection[]> {
   const qA = query(collection(db, "connections"), where("userA", "==", uid));
   const qB = query(collection(db, "connections"), where("userB", "==", uid));
   const [snapA, snapB] = await Promise.all([getDocs(qA), getDocs(qB)]);
-  const all = [...snapA.docs, ...snapB.docs];
-  return all.map((d) => ({ id: d.id, ...d.data() } as Connection));
+  const byPair = new Map<string, Connection>();
+
+  for (const snapshot of [...snapA.docs, ...snapB.docs]) {
+    const connection = { id: snapshot.id, ...snapshot.data() } as Connection;
+    const pairId = canonicalPairId(connection.userA, connection.userB);
+    if (connection.id !== pairId) {
+      await setDoc(doc(db, "connections", pairId), {
+        userA: [connection.userA, connection.userB].sort()[0],
+        userB: [connection.userA, connection.userB].sort()[1],
+        connectedAt: connection.connectedAt,
+        legacyConnectionId: connection.id,
+      });
+      connection.id = pairId;
+    }
+    byPair.set(pairId, connection);
+  }
+  return [...byPair.values()];
 }
 
 export async function getConnectedUIDs(uid: string): Promise<string[]> {
   const conns = await getConnections(uid);
-  return conns.map((c) => (c.userA === uid ? c.userB : c.userA));
+  return [...new Set(conns.map(c => c.userA === uid ? c.userB : c.userA))];
 }
 
-export async function areConnected(
-  uidA: string,
-  uidB: string
-): Promise<boolean> {
-  const q1 = query(
-    collection(db, "connections"),
-    where("userA", "==", uidA),
-    where("userB", "==", uidB),
-    limit(1)
-  );
-  const q2 = query(
-    collection(db, "connections"),
-    where("userA", "==", uidB),
-    where("userB", "==", uidA),
-    limit(1)
-  );
-  const [s1, s2] = await Promise.all([getDocs(q1), getDocs(q2)]);
-  return !s1.empty || !s2.empty;
+export async function areConnected(uidA: string, uidB: string): Promise<boolean> {
+  return (await getDoc(doc(db, "connections", canonicalPairId(uidA, uidB)))).exists();
 }
 
 // ─── Permissions ───────────────────────────────────────────────────────────────
+
+function permissionId(ownerUID: string, granteeUID: string): string {
+  return `${ownerUID}__to__${granteeUID}`;
+}
 
 export async function getPermission(
   ownerUID: string,
   granteeUID: string
 ): Promise<boolean> {
-  const q = query(
+  const canonical = await getDoc(doc(db, "permissions", permissionId(ownerUID, granteeUID)));
+  if (canonical.exists()) return canonical.data().canCopy === true;
+
+  const legacy = await getDocs(query(
     collection(db, "permissions"),
     where("ownerUID", "==", ownerUID),
     where("granteeUID", "==", granteeUID),
     limit(1)
-  );
-  const snap = await getDocs(q);
-  if (snap.empty) return false;
-  return snap.docs[0].data().canCopy ?? false;
+  ));
+  return !legacy.empty && legacy.docs[0].data().canCopy === true;
 }
 
 export async function setPermission(
@@ -500,23 +699,12 @@ export async function setPermission(
   granteeUID: string,
   canCopy: boolean
 ): Promise<void> {
-  const q = query(
-    collection(db, "permissions"),
-    where("ownerUID", "==", ownerUID),
-    where("granteeUID", "==", granteeUID),
-    limit(1)
-  );
-  const snap = await getDocs(q);
-
-  if (snap.empty) {
-    await addDoc(collection(db, "permissions"), {
-      ownerUID,
-      granteeUID,
-      canCopy,
-    });
-  } else {
-    await updateDoc(snap.docs[0].ref, { canCopy });
-  }
+  await setDoc(doc(db, "permissions", permissionId(ownerUID, granteeUID)), {
+    ownerUID,
+    granteeUID,
+    canCopy,
+    updatedAt: serverTimestamp(),
+  });
 }
 
 export async function getPermissionsGrantedTo(
@@ -540,6 +728,7 @@ export function subscribeToNotifications(
   const q = query(
     collection(db, "notifications"),
     where("receiverUID", "==", uid),
+    orderBy("createdAt", "desc"),
     limit(50)
   );
   return onSnapshot(q, (snap) => {

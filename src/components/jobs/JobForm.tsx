@@ -3,6 +3,7 @@ import { useStore } from "@nanostores/react";
 import { $auth } from "../../stores/authStore";
 import { createJob, type EmploymentType, type JobType } from "../../lib/firestore";
 import { showToast, ToastProvider } from "../ui/Toast";
+import { safeExternalUrl } from "../../lib/security";
 
 const ONLINE_VIA = ["Naukri.com", "LinkedIn", "Company Website", "Referral", "Others"];
 const WALKIN_VIA = ["Job hai", "Brute force", "By friend"];
@@ -167,6 +168,8 @@ export default function JobForm() {
   async function submitOnline(e: React.FormEvent) {
     e.preventDefault();
     if (!online.applyLink.trim()) { showToast("Apply link is required.", "error"); return; }
+    const applyLink = safeExternalUrl(online.applyLink);
+    if (!applyLink) { showToast("Apply link must be a valid https:// URL.", "error"); return; }
     if (!online.role.trim()) { showToast("Role is required.", "error"); return; }
     if (online.employmentType === "internship" && !online.internshipMonths.trim()) {
       showToast("Internship duration (months) daalo.", "error");
@@ -179,7 +182,7 @@ export default function JobForm() {
         jobType: "online",
         company: online.company.trim(),
         location: online.location.trim(),
-        applyLink: online.applyLink.trim(),
+        applyLink,
         appliedVia: online.appliedVia,
         appliedViaOther: online.appliedVia === "Others" ? online.appliedViaOther.trim() : "",
         ctc: online.ctc.trim(),
@@ -207,6 +210,10 @@ export default function JobForm() {
     if (!walkin.role.trim()) { showToast("Role is required.", "error"); return; }
     if (!walkin.company.trim()) { showToast("Company is required.", "error"); return; }
     if (!walkin.location.trim()) { showToast("Location is required.", "error"); return; }
+    const mapLink = walkin.mapLink.trim() ? safeExternalUrl(walkin.mapLink) : "";
+    const applyLink = walkin.applyLink.trim() ? safeExternalUrl(walkin.applyLink) : "";
+    if (walkin.mapLink.trim() && !mapLink) { showToast("Map link must be a valid https:// URL.", "error"); return; }
+    if (walkin.applyLink.trim() && !applyLink) { showToast("Apply link must be a valid https:// URL.", "error"); return; }
     if (walkin.employmentType === "internship" && !walkin.internshipMonths.trim()) {
       showToast("Internship duration (months) daalo.", "error");
       return;
@@ -218,7 +225,7 @@ export default function JobForm() {
         jobType: "walkin",
         company: walkin.company.trim(),
         location: walkin.location.trim(),
-        applyLink: walkin.applyLink.trim(),
+        applyLink,
         appliedVia: walkin.appliedVia,
         appliedViaOther: "",
         ctc: walkin.ctc.trim(),
@@ -226,7 +233,7 @@ export default function JobForm() {
         lastDate: null,
         bond: walkin.bond.trim(),
         batch: walkin.batch.split(",").map(b => b.trim()).filter(Boolean),
-        mapLink: walkin.mapLink.trim(),
+        mapLink,
         nearestMetro: walkin.nearestMetro.trim(),
         routeOrder: Date.now(),
         onRoute: true,

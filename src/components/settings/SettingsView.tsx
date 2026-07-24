@@ -2,18 +2,12 @@ import { useState } from "react";
 import { useStore } from "@nanostores/react";
 import { $auth, setAuthState } from "../../stores/authStore";
 import { upsertUserProfile, getUserProfile, signOut } from "../../lib/auth";
-import { setUserDeletePin, verifyUserDeletePin } from "../../lib/firestore";
 import { ToastProvider, showToast } from "../ui/Toast";
-import DeletePinModal from "../ui/DeletePinModal";
 
 export default function SettingsView() {
   const auth = useStore($auth);
   const [displayName, setDisplayName] = useState(auth.profile?.displayName ?? "");
   const [saving, setSaving] = useState(false);
-  const [pinModal, setPinModal] = useState<"setup" | "change" | null>(null);
-  const [changeStep, setChangeStep] = useState<"verify" | "setup">("verify");
-
-  const hasDeletePin = !!auth.profile?.deletePinHash;
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
@@ -45,57 +39,6 @@ export default function SettingsView() {
   return (
     <>
       <ToastProvider />
-
-      {pinModal === "setup" && (
-        <DeletePinModal
-          mode="setup"
-          title="Set delete secret code"
-          onCancel={() => setPinModal(null)}
-          onConfirm={async (pin) => {
-            if (!auth.user) return;
-            const hash = await setUserDeletePin(auth.user.uid, pin);
-            setAuthState({
-              profile: auth.profile ? { ...auth.profile, deletePinHash: hash } : auth.profile,
-            });
-            showToast("Delete secret code set.", "success");
-            setPinModal(null);
-          }}
-        />
-      )}
-
-      {pinModal === "change" && changeStep === "verify" && (
-        <DeletePinModal
-          mode="verify"
-          title="Enter current secret code"
-          confirmLabel="Continue"
-          onCancel={() => { setPinModal(null); setChangeStep("verify"); }}
-          onConfirm={async (pin) => {
-            if (!auth.user) return;
-            const ok = await verifyUserDeletePin(auth.user.uid, pin, auth.profile?.deletePinHash);
-            if (!ok) throw new Error("Galat code. Dobara try karo.");
-            setChangeStep("setup");
-          }}
-        />
-      )}
-
-      {pinModal === "change" && changeStep === "setup" && (
-        <DeletePinModal
-          mode="setup"
-          title="Set new secret code"
-          confirmLabel="Save new code"
-          onCancel={() => { setPinModal(null); setChangeStep("verify"); }}
-          onConfirm={async (pin) => {
-            if (!auth.user) return;
-            const hash = await setUserDeletePin(auth.user.uid, pin);
-            setAuthState({
-              profile: auth.profile ? { ...auth.profile, deletePinHash: hash } : auth.profile,
-            });
-            showToast("Secret code updated.", "success");
-            setPinModal(null);
-            setChangeStep("verify");
-          }}
-        />
-      )}
 
       <div className="page-header">
         <h1 className="page-title">Settings</h1>
@@ -167,30 +110,6 @@ export default function SettingsView() {
             </button>
           </div>
         </form>
-      </div>
-
-      <div className="settings-section">
-        <div className="settings-section-title">Delete Secret Code</div>
-        <div style={{ padding: "12px 0", borderBottom: "1px solid var(--hairline)" }}>
-          <p style={{ fontSize: 13, color: "var(--body)", lineHeight: 1.6, marginBottom: 12 }}>
-            Job delete karne pe 4-digit secret code maanga jayega.
-            {hasDeletePin ? " Code already set hai." : " Abhi set nahi hai — pehli delete pe bhi set ho sakta hai."}
-          </p>
-          <button
-            type="button"
-            className="btn btn-secondary btn-sm"
-            onClick={() => {
-              if (hasDeletePin) {
-                setChangeStep("verify");
-                setPinModal("change");
-              } else {
-                setPinModal("setup");
-              }
-            }}
-          >
-            {hasDeletePin ? "Change secret code →" : "Set 4-digit code →"}
-          </button>
-        </div>
       </div>
 
       <div className="settings-section">

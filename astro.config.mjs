@@ -11,7 +11,7 @@ export default defineConfig({
   vite: {
     plugins: [tailwindcss()],
     optimizeDeps: {
-      include: ['firebase/app', 'firebase/auth', 'firebase/firestore'],
+      include: ['firebase/app', 'firebase/auth', 'firebase/firestore', 'firebase/app-check'],
     },
     ssr: {
       noExternal: ['nanostores', '@nanostores/react'],

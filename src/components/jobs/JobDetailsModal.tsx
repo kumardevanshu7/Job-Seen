@@ -2,6 +2,7 @@ import React from "react";
 import type { JobCard as JobCardType, JobStatus } from "../../lib/firestore";
 import { updateJobStatus } from "../../lib/firestore";
 import { showToast } from "../ui/Toast";
+import { safeExternalUrl } from "../../lib/security";
 
 interface Props {
   job: JobCardType;
@@ -29,6 +30,7 @@ function formatDetailedDate(d: any): string {
 export default function JobDetailsModal({ job, onClose }: Props) {
   const [updating, setUpdating] = React.useState(false);
   const statusConfig = STATUS_CONFIG[job.status] || STATUS_CONFIG.pending;
+  const safeJobLink = safeExternalUrl((job as any).link);
 
   async function handleStatusUpdate(newStatus: JobStatus) {
     setUpdating(true);
@@ -167,10 +169,10 @@ export default function JobDetailsModal({ job, onClose }: Props) {
             </div>
           )}
 
-          {job.link && (
+          {safeJobLink && (
             <div style={{ marginBottom: 24 }}>
               <a 
-                href={job.link} 
+                href={safeJobLink} 
                 target="_blank" 
                 rel="noreferrer"
                 style={{

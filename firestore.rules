@@ -1,154 +1,486 @@
 rules_version = '2';
-
 service cloud.firestore {
   match /databases/{database}/documents {
-
-    // ── Helper functions ──────────────────────────────────────────────────
-
-    function isAuth() {
+    function signedIn() {
       return request.auth != null;
     }
 
-    function isSelf(uid) {
-      return request.auth.uid == uid;
+    function self(uid) {
+      return signedIn() && request.auth.uid == uid;
     }
 
-    function isSuperAdmin() {
-      // Must match PUBLIC_SUPER_ADMIN_UID in .env / Vercel env vars.
-      // Replace the string below with your Firebase Auth UID, then:
-      //   firebase deploy --only firestore:rules
-      return request.auth.uid == "YOUR_SUPER_ADMIN_UID_HERE";
+    function admin() {
+      return signedIn() && request.auth.token.admin == true;
     }
 
-    function isConnected(uid1, uid2) {
-      return exists(/databases/$(database)/documents/connections/$(uid1 + "_" + uid2))
-          || exists(/databases/$(database)/documents/connections/$(uid2 + "_" + uid1));
+    function validUsername(value) {
+      return value is string
+        && value.size() >= 3
+        && value.size() <= 20
+        && value.matches('^[a-z0-9_]+$');
     }
 
-    // ── Users ─────────────────────────────────────────────────────────────
+    function pairMatches(id, uidA, uidB) {
+      return id == uidA + '__' + uidB || id == uidB + '__' + uidA;
+    }
+
+    function connected(uidA, uidB) {
+      return exists(/databases/$(database)/documents/connections/$(uidA + '__' + uidB))
+        || exists(/databases/$(database)/documents/connections/$(uidB + '__' + uidA));
+    }
+
+    function httpsOrEmpty(value) {
+      return value is string && (value == '' || value.matches('^https://.*'));
+    }
+
+    function validPhoto(value) {
+      return value == null || (value is string && value.size() <= 2048 && value.matches('^https://.*'));
+    }
+
+    function validPrivateUser(data) {
+      return data.keys().hasAll(['email', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['email', 'createdAt', 'updatedAt'])
+        && data.email is string
+        && data.email.size() <= 320
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function validPublicProfile(data) {
+      return data.keys().hasAll(['uid', 'username', 'displayName', 'photoURL', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['uid', 'username', 'displayName', 'photoURL', 'createdAt', 'updatedAt'])
+        && data.uid is string
+        && validUsername(data.username)
+        && data.displayName is string
+        && data.displayName.size() >= 1
+        && data.displayName.size() <= 80
+        && validPhoto(data.photoURL)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function validJob(data) {
+      return data.keys().hasAll(['ownerUID', 'ownerUsername', 'company', 'role', 'createdAt'])
+        && data.keys().hasOnly([
+          'ownerUID', 'ownerUsername', 'company', 'location', 'role', 'ctc',
+          'applyLink', 'appliedVia', 'appliedViaOther', 'batch', 'bond', 'lastDate',
+          'copiedFromUID', 'copiedFromUsername', 'createdAt', 'status', 'appliedAt',
+          'reminderDismissedAt', 'cancelReason', 'jobType', 'mapLink', 'nearestMetro',
+          'routeOrder', 'onRoute', 'employmentType', 'internshipMonths', 'ppo'
+        ])
+        && data.ownerUID is string
+        && validUsername(data.ownerUsername)
+        && data.company is string && data.company.size() <= 200
+        && data.role is string && data.role.size() >= 1 && data.role.size() <= 200
+        && (!('location' in data) || (data.location is string && data.location.size() <= 300))
+        && (!('ctc' in data) || (data.ctc is string && data.ctc.size() <= 100))
+        && (!('applyLink' in data) || httpsOrEmpty(data.applyLink))
+        && (!('mapLink' in data) || httpsOrEmpty(data.mapLink))
+        && (!('appliedVia' in data) || (data.appliedVia is string && data.appliedVia.size() <= 80))
+        && (!('appliedViaOther' in data) || (data.appliedViaOther is string && data.appliedViaOther.size() <= 80))
+        && (!('batch' in data) || (data.batch is list && data.batch.size() <= 30))
+        && (!('bond' in data) || (data.bond is string && data.bond.size() <= 100))
+        && (!('cancelReason' in data) || (data.cancelReason is string && data.cancelReason.size() <= 500))
+        && (!('nearestMetro' in data) || (data.nearestMetro is string && data.nearestMetro.size() <= 200))
+        && (!('internshipMonths' in data) || (data.internshipMonths is string && data.internshipMonths.size() <= 20))
+        && (!('routeOrder' in data) || data.routeOrder is number)
+        && (!('onRoute' in data) || data.onRoute is bool)
+        && (!('jobType' in data) || data.jobType in ['online', 'walkin'])
+        && (!('employmentType' in data) || data.employmentType in ['full_time', 'part_time', 'internship'])
+        && (!('ppo' in data) || data.ppo in ['', 'yes', 'no', 'maybe'])
+        && (!('status' in data) || data.status in [
+          'pending', 'applied', 'in_progress', 'no_response', 'rejected',
+          'selected', 'interview_done', 'fraud', 'cancelled'
+        ])
+        && (!('lastDate' in data) || data.lastDate == null || data.lastDate is timestamp)
+        && (!('appliedAt' in data) || data.appliedAt == null || data.appliedAt is timestamp)
+        && (!('reminderDismissedAt' in data) || data.reminderDismissedAt == null || data.reminderDismissedAt is timestamp)
+        && (!('copiedFromUID' in data) || data.copiedFromUID == null || data.copiedFromUID is string)
+        && (!('copiedFromUsername' in data) || data.copiedFromUsername == null || data.copiedFromUsername is string)
+        && data.createdAt is timestamp;
+    }
+
+    function validBruteForceJob(data) {
+      return data.keys().hasAll([
+          'ownerUID', 'ownerUsername', 'company', 'phone', 'location', 'mapLink',
+          'role', 'callOutcome', 'decision', 'successAt', 'interviewMode',
+          'interviewAt', 'interviewRescheduledAt', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'ownerUID', 'ownerUsername', 'company', 'phone', 'location', 'mapLink',
+          'role', 'callOutcome', 'decision', 'successAt', 'interviewMode',
+          'interviewAt', 'interviewRescheduledAt', 'createdAt', 'updatedAt'
+        ])
+        && data.ownerUID is string
+        && validUsername(data.ownerUsername)
+        && data.company is string && data.company.size() >= 1 && data.company.size() <= 200
+        && data.phone is string && data.phone.size() <= 30
+        && data.location is string && data.location.size() >= 1 && data.location.size() <= 300
+        && data.mapLink is string && data.mapLink.matches('^https://.*')
+        && data.role is string && data.role.size() >= 1 && data.role.size() <= 200
+        && data.callOutcome in ['not_called', 'no_response', 'wrong_number', 'no_vacancies', 'success']
+        && data.decision in ['pending', 'selected', 'rejected']
+        && (data.successAt == null || data.successAt is timestamp)
+        && (data.interviewMode == null || data.interviewMode in ['offline', 'online'])
+        && (data.interviewAt == null || data.interviewAt is timestamp)
+        && (data.interviewRescheduledAt == null || data.interviewRescheduledAt is timestamp)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp
+        && (
+          (data.callOutcome == 'success'
+            && data.successAt is timestamp
+            && data.interviewMode in ['offline', 'online']
+            && data.interviewAt is timestamp)
+          || (data.callOutcome != 'success'
+            && data.decision == 'pending'
+            && data.successAt == null
+            && data.interviewMode == null
+            && data.interviewAt == null
+            && data.interviewRescheduledAt == null)
+        )
+        && (data.decision == 'pending' || data.callOutcome == 'success');
+    }
+
+    function validRequest(data) {
+      return data.keys().hasAll(['senderUID', 'receiverUID', 'status', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['senderUID', 'receiverUID', 'status', 'createdAt', 'updatedAt'])
+        && data.senderUID is string
+        && data.receiverUID is string
+        && data.senderUID != data.receiverUID
+        && data.status in ['pending', 'accepted', 'declined']
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function validConnection(data) {
+      return data.keys().hasAll(['userA', 'userB', 'connectedAt'])
+        && data.keys().hasOnly(['userA', 'userB', 'connectedAt', 'requestId', 'legacyConnectionId'])
+        && data.userA is string
+        && data.userB is string
+        && data.userA != data.userB
+        && data.connectedAt is timestamp
+        && (('requestId' in data) != ('legacyConnectionId' in data));
+    }
+
+    function acceptedRequestProof(data) {
+      return 'requestId' in data
+        && existsAfter(/databases/$(database)/documents/friendRequests/$(data.requestId))
+        && getAfter(/databases/$(database)/documents/friendRequests/$(data.requestId)).data.status == 'accepted'
+        && getAfter(/databases/$(database)/documents/friendRequests/$(data.requestId)).data.senderUID in [data.userA, data.userB]
+        && getAfter(/databases/$(database)/documents/friendRequests/$(data.requestId)).data.receiverUID in [data.userA, data.userB]
+        && getAfter(/databases/$(database)/documents/friendRequests/$(data.requestId)).data.receiverUID == request.auth.uid;
+    }
+
+    function legacyConnectionProof(data) {
+      return 'legacyConnectionId' in data
+        && exists(/databases/$(database)/documents/connections/$(data.legacyConnectionId))
+        && get(/databases/$(database)/documents/connections/$(data.legacyConnectionId)).data.userA in [data.userA, data.userB]
+        && get(/databases/$(database)/documents/connections/$(data.legacyConnectionId)).data.userB in [data.userA, data.userB]
+        && request.auth.uid in [data.userA, data.userB];
+    }
+
+    function validPermission(data) {
+      return data.keys().hasAll(['ownerUID', 'granteeUID', 'canCopy', 'updatedAt'])
+        && data.keys().hasOnly(['ownerUID', 'granteeUID', 'canCopy', 'updatedAt'])
+        && data.ownerUID is string
+        && data.granteeUID is string
+        && data.ownerUID != data.granteeUID
+        && data.canCopy is bool
+        && data.updatedAt is timestamp;
+    }
+
+    function validNotification(data) {
+      return data.keys().hasAll([
+          'receiverUID', 'senderUID', 'senderUsername', 'senderDisplayName',
+          'type', 'requestId', 'status', 'createdAt'
+        ])
+        && data.keys().hasOnly([
+          'receiverUID', 'senderUID', 'senderUsername', 'senderDisplayName',
+          'type', 'requestId', 'status', 'createdAt'
+        ])
+        && data.senderUID == request.auth.uid
+        && data.receiverUID != data.senderUID
+        && data.type == 'connection_request'
+        && data.status == 'unread'
+        && validUsername(data.senderUsername)
+        && data.senderDisplayName is string
+        && data.senderDisplayName.size() <= 80
+        && data.createdAt is timestamp;
+    }
+
+    function validChat(data) {
+      return data.keys().hasAll(['participants'])
+        && data.keys().hasOnly(['participants', 'updatedAt', 'lastText', 'lastSenderUID'])
+        && data.participants is list
+        && data.participants.size() == 2
+        && data.participants[0] is string
+        && data.participants[1] is string
+        && data.participants[0] != data.participants[1]
+        && (!('lastText' in data) || (data.lastText is string && data.lastText.size() <= 80))
+        && (!('lastSenderUID' in data) || data.lastSenderUID in data.participants)
+        && (!('updatedAt' in data) || data.updatedAt is timestamp);
+    }
+
+    function chatAccess(chatId, afterWrite) {
+      let chat = afterWrite
+        ? getAfter(/databases/$(database)/documents/chats/$(chatId)).data
+        : get(/databases/$(database)/documents/chats/$(chatId)).data;
+      return signedIn()
+        && request.auth.uid in chat.participants
+        && pairMatches(chatId, chat.participants[0], chat.participants[1])
+        && connected(chat.participants[0], chat.participants[1]);
+    }
+
+    function validMessage(data) {
+      return data.keys().hasAll(['senderUID', 'senderUsername', 'text', 'createdAt', 'read'])
+        && data.keys().hasOnly(['senderUID', 'senderUsername', 'text', 'createdAt', 'read'])
+        && data.senderUID == request.auth.uid
+        && validUsername(data.senderUsername)
+        && data.text is string
+        && data.text.size() >= 1
+        && data.text.size() <= 2000
+        && data.createdAt is timestamp
+        && data.read == false;
+    }
 
     match /users/{uid} {
-      allow read: if isAuth();
-      allow create: if isAuth() && isSelf(uid);
-      allow update: if isAuth() && (isSelf(uid) || isSuperAdmin());
-      allow delete: if isSuperAdmin();
+      allow get: if self(uid) || admin();
+      allow list: if admin();
+      allow create: if self(uid)
+        && validPrivateUser(request.resource.data)
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.updatedAt == request.time;
+      allow update: if (self(uid) || admin())
+        && validPrivateUser(request.resource.data)
+        && request.resource.data.updatedAt == request.time
+        && (
+          !validPrivateUser(resource.data)
+          || request.resource.data.createdAt == resource.data.createdAt
+        );
+      allow delete: if admin();
     }
 
-    // ── Jobs ──────────────────────────────────────────────────────────────
+    match /publicProfiles/{uid} {
+      allow get: if signedIn();
+      allow list: if admin();
+      allow create: if self(uid)
+        && validPublicProfile(request.resource.data)
+        && request.resource.data.uid == uid
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.updatedAt == request.time
+        && getAfter(/databases/$(database)/documents/usernames/$(request.resource.data.username)).data.uid == uid;
+      allow update: if (self(uid) || admin())
+        && validPublicProfile(request.resource.data)
+        && request.resource.data.uid == resource.data.uid
+        && request.resource.data.username == resource.data.username
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.updatedAt == request.time;
+      allow delete: if admin();
+    }
+
+    match /usernames/{username} {
+      allow get: if signedIn();
+      allow list: if admin();
+      allow create: if signedIn()
+        && validUsername(username)
+        && request.resource.data.keys().hasAll(['uid', 'createdAt'])
+        && request.resource.data.keys().hasOnly(['uid', 'createdAt'])
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.createdAt == request.time
+        && getAfter(/databases/$(database)/documents/publicProfiles/$(request.auth.uid)).data.username == username;
+      allow update, delete: if admin();
+    }
 
     match /jobs/{jobId} {
-      allow read: if isAuth() && (
-        isSuperAdmin()
+      allow read: if signedIn() && (
+        admin()
         || resource.data.ownerUID == request.auth.uid
-        || (
-          // Connected users can read
-          resource.data.ownerUID != request.auth.uid
-        )
+        || connected(resource.data.ownerUID, request.auth.uid)
       );
-      allow create: if isAuth() && request.resource.data.ownerUID == request.auth.uid;
-      allow update: if isAuth() && (isSelf(resource.data.ownerUID) || isSuperAdmin());
-      allow delete: if isAuth() && (isSelf(resource.data.ownerUID) || isSuperAdmin());
+      allow create: if signedIn()
+        && validJob(request.resource.data)
+        && request.resource.data.ownerUID == request.auth.uid
+        && request.resource.data.ownerUsername == get(/databases/$(database)/documents/publicProfiles/$(request.auth.uid)).data.username
+        && request.resource.data.createdAt == request.time;
+      allow update: if signedIn()
+        && (resource.data.ownerUID == request.auth.uid || admin())
+        && validJob(request.resource.data)
+        && request.resource.data.ownerUID == resource.data.ownerUID
+        && request.resource.data.ownerUsername == resource.data.ownerUsername
+        && request.resource.data.createdAt == resource.data.createdAt;
+      allow delete: if signedIn() && (resource.data.ownerUID == request.auth.uid || admin());
     }
 
-    // ── Friend Requests ───────────────────────────────────────────────────
+    match /bruteForceJobs/{leadId} {
+      allow read: if signedIn() && (resource.data.ownerUID == request.auth.uid || admin());
+      allow create: if signedIn()
+        && validBruteForceJob(request.resource.data)
+        && request.resource.data.ownerUID == request.auth.uid
+        && request.resource.data.ownerUsername == get(/databases/$(database)/documents/publicProfiles/$(request.auth.uid)).data.username
+        && request.resource.data.callOutcome == 'not_called'
+        && request.resource.data.decision == 'pending'
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.updatedAt == request.time;
+      allow update: if signedIn()
+        && (resource.data.ownerUID == request.auth.uid || admin())
+        && validBruteForceJob(request.resource.data)
+        && request.resource.data.ownerUID == resource.data.ownerUID
+        && request.resource.data.ownerUsername == resource.data.ownerUsername
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.updatedAt == request.time
+        && (
+          (
+            resource.data.decision == 'pending'
+            && resource.data.callOutcome != 'success'
+            && request.resource.data.decision == 'pending'
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+              'callOutcome', 'successAt', 'interviewMode', 'interviewAt',
+              'interviewRescheduledAt', 'updatedAt'
+            ])
+            && (
+              (request.resource.data.callOutcome == 'success'
+                && request.resource.data.successAt == request.time
+                && request.resource.data.interviewAt > request.time
+                && request.resource.data.interviewRescheduledAt == null)
+              || (request.resource.data.callOutcome != 'success'
+                && request.resource.data.successAt == null
+                && request.resource.data.interviewMode == null
+                && request.resource.data.interviewAt == null
+                && request.resource.data.interviewRescheduledAt == null)
+            )
+          )
+          || (
+            resource.data.callOutcome == 'success'
+            && resource.data.decision == 'pending'
+            && request.resource.data.callOutcome == 'success'
+            && request.resource.data.decision == 'pending'
+            && request.resource.data.successAt == resource.data.successAt
+            && request.resource.data.interviewMode == resource.data.interviewMode
+            && request.resource.data.interviewAt > request.time
+            && request.resource.data.interviewRescheduledAt == request.time
+            && request.time >= resource.data.successAt + duration.value(24, 'h')
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+              'interviewAt', 'interviewRescheduledAt', 'updatedAt'
+            ])
+          )
+          || (
+            resource.data.callOutcome == 'success'
+            && resource.data.decision == 'pending'
+            && request.resource.data.callOutcome == 'success'
+            && request.resource.data.decision in ['selected', 'rejected']
+            && request.time >= resource.data.interviewAt
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['decision', 'updatedAt'])
+          )
+        );
+      allow delete: if signedIn() && (resource.data.ownerUID == request.auth.uid || admin());
+    }
 
-    match /friendRequests/{reqId} {
-      allow read: if isAuth() && (
+    match /friendRequests/{requestId} {
+      allow read: if signedIn() && (
         resource.data.senderUID == request.auth.uid
         || resource.data.receiverUID == request.auth.uid
-        || isSuperAdmin()
+        || admin()
       );
-      allow create: if isAuth() && request.resource.data.senderUID == request.auth.uid;
-      allow update: if isAuth() && (
-        resource.data.receiverUID == request.auth.uid
-        || isSuperAdmin()
+      allow create: if signedIn()
+        && validRequest(request.resource.data)
+        && request.resource.data.senderUID == request.auth.uid
+        && request.resource.data.status == 'pending'
+        && pairMatches(requestId, request.resource.data.senderUID, request.resource.data.receiverUID)
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.updatedAt == request.time;
+      allow update: if signedIn() && validRequest(request.resource.data) && (
+        (
+          resource.data.receiverUID == request.auth.uid
+          && resource.data.status == 'pending'
+          && request.resource.data.status in ['accepted', 'declined']
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'updatedAt'])
+        )
+        || admin()
       );
-      allow delete: if isSuperAdmin();
+      allow delete: if admin();
     }
 
-    // ── Connections ───────────────────────────────────────────────────────
-
-    match /connections/{connId} {
-      allow read: if isAuth() && (
-        resource.data.userA == request.auth.uid
-        || resource.data.userB == request.auth.uid
-        || isSuperAdmin()
+    match /connections/{connectionId} {
+      allow read: if signedIn() && (
+        request.auth.uid in [resource.data.userA, resource.data.userB] || admin()
       );
-      allow create: if isAuth();
-      allow update, delete: if isSuperAdmin();
-    }
-
-    // ── Permissions ───────────────────────────────────────────────────────
-
-    match /permissions/{permId} {
-      allow read: if isAuth() && (
-        resource.data.ownerUID == request.auth.uid
-        || resource.data.granteeUID == request.auth.uid
-        || isSuperAdmin()
-      );
-      allow create, update: if isAuth() && (
-        request.resource.data.ownerUID == request.auth.uid
-        || isSuperAdmin()
-      );
-      allow delete: if isAuth() && (
-        resource.data.ownerUID == request.auth.uid
-        || isSuperAdmin()
+      allow create: if signedIn()
+        && validConnection(request.resource.data)
+        && pairMatches(connectionId, request.resource.data.userA, request.resource.data.userB)
+        && request.auth.uid in [request.resource.data.userA, request.resource.data.userB]
+        && (acceptedRequestProof(request.resource.data) || legacyConnectionProof(request.resource.data));
+      allow update: if false;
+      allow delete: if signedIn() && (
+        request.auth.uid in [resource.data.userA, resource.data.userB] || admin()
       );
     }
 
-    // ── Notifications ─────────────────────────────────────────────────────
-
-    match /notifications/{notifId} {
-      allow read: if isAuth() && (
-        resource.data.receiverUID == request.auth.uid
-        || isSuperAdmin()
+    match /permissions/{permissionId} {
+      allow read: if signedIn() && (
+        request.auth.uid in [resource.data.ownerUID, resource.data.granteeUID] || admin()
       );
-      allow create: if isAuth();
-      allow update: if isAuth() && (
-        resource.data.receiverUID == request.auth.uid
-        || isSuperAdmin()
-      );
-      allow delete: if isAuth() && (
-        resource.data.receiverUID == request.auth.uid
-        || isSuperAdmin()
-      );
+      allow create, update: if signedIn()
+        && validPermission(request.resource.data)
+        && permissionId == request.resource.data.ownerUID + '__to__' + request.resource.data.granteeUID
+        && (request.resource.data.ownerUID == request.auth.uid || admin())
+        && connected(request.resource.data.ownerUID, request.resource.data.granteeUID)
+        && (!exists(/databases/$(database)/documents/permissions/$(permissionId))
+          || request.resource.data.ownerUID == resource.data.ownerUID);
+      allow delete: if signedIn() && (resource.data.ownerUID == request.auth.uid || admin());
     }
 
-    // ── Chats ─────────────────────────────────────────────────────────────
+    match /notifications/{notificationId} {
+      allow read: if signedIn() && (resource.data.receiverUID == request.auth.uid || admin());
+      allow create: if signedIn()
+        && validNotification(request.resource.data)
+        && notificationId == request.resource.data.requestId
+        && getAfter(/databases/$(database)/documents/friendRequests/$(request.resource.data.requestId)).data.status == 'pending'
+        && getAfter(/databases/$(database)/documents/friendRequests/$(request.resource.data.requestId)).data.senderUID == request.resource.data.senderUID
+        && getAfter(/databases/$(database)/documents/friendRequests/$(request.resource.data.requestId)).data.receiverUID == request.resource.data.receiverUID
+        && get(/databases/$(database)/documents/publicProfiles/$(request.auth.uid)).data.username == request.resource.data.senderUsername
+        && get(/databases/$(database)/documents/publicProfiles/$(request.auth.uid)).data.displayName == request.resource.data.senderDisplayName;
+      allow update: if signedIn()
+        && resource.data.receiverUID == request.auth.uid
+        && resource.data.status == 'unread'
+        && request.resource.data.status == 'read'
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status']);
+      allow delete: if signedIn() && (resource.data.receiverUID == request.auth.uid || admin());
+    }
 
-    // Chat document (metadata: lastText, updatedAt)
     match /chats/{chatId} {
-      // chatId = "uid1_uid2" (sorted). User must be one of the two.
-      allow read, write: if isAuth() && (
-        chatId.split("_")[0] == request.auth.uid
-        || chatId.split("_")[1] == request.auth.uid
-        || isSuperAdmin()
-      );
+      allow read: if admin() || chatAccess(chatId, false);
+      allow create: if signedIn()
+        && validChat(request.resource.data)
+        && request.auth.uid in request.resource.data.participants
+        && pairMatches(chatId, request.resource.data.participants[0], request.resource.data.participants[1])
+        && connected(request.resource.data.participants[0], request.resource.data.participants[1]);
+      allow update: if signedIn()
+        && validChat(request.resource.data)
+        && request.auth.uid in request.resource.data.participants
+        && pairMatches(chatId, request.resource.data.participants[0], request.resource.data.participants[1])
+        && connected(request.resource.data.participants[0], request.resource.data.participants[1])
+        && (
+          !('participants' in resource.data)
+          || request.resource.data.participants == resource.data.participants
+        );
+      allow delete: if admin();
 
-      // Messages subcollection
-      match /messages/{msgId} {
-        allow read: if isAuth() && (
-          chatId.split("_")[0] == request.auth.uid
-          || chatId.split("_")[1] == request.auth.uid
-          || isSuperAdmin()
-        );
-        allow create: if isAuth() && (
-          request.resource.data.senderUID == request.auth.uid
-          && (
-            chatId.split("_")[0] == request.auth.uid
-            || chatId.split("_")[1] == request.auth.uid
-          )
-        );
-        allow update: if isAuth() && (
-          // Only allow marking messages as read (not editing text)
-          request.resource.data.diff(resource.data).affectedKeys().hasOnly(["read"])
-          && (
-            chatId.split("_")[0] == request.auth.uid
-            || chatId.split("_")[1] == request.auth.uid
-          )
-        );
-        allow delete: if isSuperAdmin();
+      match /messages/{messageId} {
+        allow read: if admin() || chatAccess(chatId, false);
+        allow create: if chatAccess(chatId, true)
+          && validMessage(request.resource.data)
+          && request.resource.data.senderUsername == get(/databases/$(database)/documents/publicProfiles/$(request.auth.uid)).data.username;
+        allow update: if chatAccess(chatId, false)
+          && resource.data.senderUID != request.auth.uid
+          && resource.data.read == false
+          && request.resource.data.read == true
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read']);
+        allow delete: if admin();
       }
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
     }
   }
 }

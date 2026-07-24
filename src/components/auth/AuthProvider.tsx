@@ -1,10 +1,9 @@
 import { useEffect, useState } from "react";
-import { onAuthChanged, getUserProfile, isAdmin } from "../../lib/auth";
+import { onAuthChanged, getUserProfile, hasAdminClaim } from "../../lib/auth";
 import { $auth, setAuthState } from "../../stores/authStore";
 import { subscribeToNotifications, getConnectedUIDs, subscribeToUnreadChatCount } from "../../lib/firestore";
 import { setNotifications } from "../../stores/notificationStore";
 import { setUnreadChatCount } from "../../stores/chatStore";
-import type { UserProfile } from "../../lib/firestore";
 import UsernameSetup from "./UsernameSetup";
 import ShimmerSkeleton from "../ui/ShimmerSkeleton";
 
@@ -16,56 +15,82 @@ interface Props {
 export default function AuthProvider({ children, requireAdmin = false }: Props) {
   const cached = $auth.get();
   const [state, setState] = useState({
-    // Client-side nav remounts this island — reuse store so spinner na dikhe
     loading: !(cached.initialized && cached.user && cached.profile),
     needsUsername: false,
     notAdmin: false,
   });
 
   useEffect(() => {
-    const unsub = onAuthChanged(async (user) => {
+    let disposed = false;
+    let generation = 0;
+    let unsubscribeNotifications: (() => void) | null = null;
+    let unsubscribeChats: (() => void)[] = [];
+
+    const clearLiveData = () => {
+      unsubscribeNotifications?.();
+      unsubscribeNotifications = null;
+      unsubscribeChats.forEach(unsubscribe => unsubscribe());
+      unsubscribeChats = [];
+      setNotifications([]);
+      setUnreadChatCount(0, {});
+    };
+
+    const unsubscribeAuth = onAuthChanged(async user => {
+      const currentGeneration = ++generation;
+      clearLiveData();
+
       if (!user) {
-        setAuthState({ user: null, profile: null, loading: false, initialized: true });
+        setAuthState({ user: null, profile: null, isAdmin: false, loading: false, initialized: true });
         setState({ loading: false, needsUsername: false, notAdmin: false });
         window.location.href = "/login";
         return;
       }
 
-      if (requireAdmin && !isAdmin(user.uid)) {
-        setState({ loading: false, needsUsername: false, notAdmin: true });
-        return;
+      try {
+        const [admin, profile] = await Promise.all([
+          hasAdminClaim(user),
+          getUserProfile(user.uid),
+        ]);
+        if (disposed || currentGeneration !== generation) return;
+
+        if (requireAdmin && !admin) {
+          setAuthState({ user, profile: null, isAdmin: false, loading: false, initialized: true });
+          setState({ loading: false, needsUsername: false, notAdmin: true });
+          return;
+        }
+
+        if (!profile?.username) {
+          setAuthState({ user, profile: null, isAdmin: admin, loading: false, initialized: true });
+          setState({ loading: false, needsUsername: true, notAdmin: false });
+          return;
+        }
+
+        setAuthState({ user, profile, isAdmin: admin, loading: false, initialized: true });
+        setState({ loading: false, needsUsername: false, notAdmin: false });
+        unsubscribeNotifications = subscribeToNotifications(user.uid, setNotifications);
+
+        const connectedUIDs = await getConnectedUIDs(user.uid);
+        if (disposed || currentGeneration !== generation) {
+          unsubscribeNotifications?.();
+          return;
+        }
+        unsubscribeChats = subscribeToUnreadChatCount(user.uid, connectedUIDs, setUnreadChatCount);
+      } catch {
+        if (disposed || currentGeneration !== generation) return;
+        setAuthState({ user, profile: null, isAdmin: false, loading: false, initialized: true });
+        setState({ loading: false, needsUsername: false, notAdmin: false });
       }
-
-      const profile = await getUserProfile(user.uid) as UserProfile | null;
-
-      if (!profile || !profile.username) {
-        setAuthState({ user, profile: null, loading: false, initialized: true });
-        setState({ loading: false, needsUsername: true, notAdmin: false });
-        return;
-      }
-
-      setAuthState({ user, profile: { ...profile, uid: user.uid } as UserProfile, loading: false, initialized: true });
-      setState({ loading: false, needsUsername: false, notAdmin: false });
-
-      const unsubNotif = subscribeToNotifications(user.uid, setNotifications);
-
-      let unsubsChat: (() => void)[] = [];
-      getConnectedUIDs(user.uid).then(uids => {
-        unsubsChat = subscribeToUnreadChatCount(user.uid, uids, setUnreadChatCount);
-      });
-
-      return () => {
-        unsubNotif();
-        unsubsChat.forEach(u => u());
-      };
     });
 
-    return () => unsub();
+    return () => {
+      disposed = true;
+      generation += 1;
+      unsubscribeAuth();
+      clearLiveData();
+    };
   }, [requireAdmin]);
 
-  if (state.loading) {
-    return <ShimmerSkeleton variant="auth" />;
-  }
+  if (state.loading) return <ShimmerSkeleton variant="auth" />;
 
   if (state.notAdmin) {
     return (
@@ -77,9 +102,6 @@ export default function AuthProvider({ children, requireAdmin = false }: Props) 
     );
   }
 
-  if (state.needsUsername) {
-    return <UsernameSetup />;
-  }
-
+  if (state.needsUsername) return <UsernameSetup />;
   return <>{children}</>;
 }

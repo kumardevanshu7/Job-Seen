@@ -3,7 +3,7 @@ import { useStore } from "@nanostores/react";
 import { $auth } from "../../stores/authStore";
 import { $notifications } from "../../stores/notificationStore";
 import { $unreadChatCount } from "../../stores/chatStore";
-import { signOut, isAdmin } from "../../lib/auth";
+import { signOut } from "../../lib/auth";
 
 // Icon glyphs (monospace ASCII, not SVG)
 const icons: Record<string, string> = {
@@ -22,6 +22,7 @@ const primaryNav = [
   { href: "/",                     label: "Inbox",         icon: "⊙" },
   { href: "/add-job",              label: "Add Job",       icon: "+" },
   { href: "/walk-in",              label: "Walk-in Route", icon: "⌁" },
+  { href: "/brute-force",          label: "Brute Force Jobs", icon: "☎" },
 ];
 
 const secondaryNav = [
@@ -41,7 +42,7 @@ export default function Sidebar() {
   const [path, setPath] = useState(
     typeof window !== "undefined" ? window.location.pathname : ""
   );
-  const admin = auth.user ? isAdmin(auth.user.uid) : false;
+  const admin = auth.isAdmin;
 
   useEffect(() => {
     const sync = () => setPath(window.location.pathname);

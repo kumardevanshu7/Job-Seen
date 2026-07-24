@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { useStore } from "@nanostores/react";
-import { $auth, setAuthState } from "../../stores/authStore";
-import { subscribeToUserJobs, deleteJob, updateJobStatus, setUserDeletePin, verifyUserDeletePin } from "../../lib/firestore";
+import { $auth } from "../../stores/authStore";
+import { subscribeToUserJobs, deleteJob, updateJobStatus } from "../../lib/firestore";
 import type { JobCard as JobCardType, JobStatus } from "../../lib/firestore";
 import JobCard from "./JobCard";
 import { ToastProvider, showToast } from "../ui/Toast";
-import DeletePinModal from "../ui/DeletePinModal";
+import ConfirmModal from "../ui/ConfirmModal";
 import ShimmerSkeleton from "../ui/ShimmerSkeleton";
 
 function toDate(d: any): Date | null {
@@ -37,8 +37,6 @@ export default function HomeView() {
   const [filterTab, setFilterTab] = useState<"all" | "mine" | "copied">("all");
   const [dateBasis, setDateBasis] = useState<"added" | "applied">("added");
   const [dateFilter, setDateFilter] = useState<string>("all");
-
-  const hasDeletePin = !!auth.profile?.deletePinHash;
 
   useEffect(() => {
     const saved = localStorage.getItem("jobseen_view_mode");
@@ -77,17 +75,8 @@ export default function HomeView() {
     window.location.href = `/job?id=${encodeURIComponent(job.id)}`;
   }
 
-  async function confirmDeleteWithPin(pin: string) {
+  async function confirmDelete() {
     if (!deleteTarget || !auth.user) return;
-    if (!hasDeletePin) {
-      const hash = await setUserDeletePin(auth.user.uid, pin);
-      setAuthState({
-        profile: auth.profile ? { ...auth.profile, deletePinHash: hash } : auth.profile,
-      });
-    } else {
-      const ok = await verifyUserDeletePin(auth.user.uid, pin, auth.profile?.deletePinHash);
-      if (!ok) throw new Error("Galat code. Dobara try karo.");
-    }
     await deleteJob(deleteTarget);
     showToast("Job removed.", "info");
     setDeleteTarget(null);
@@ -162,11 +151,13 @@ export default function HomeView() {
       <ToastProvider />
 
       {deleteTarget && (
-        <DeletePinModal
-          mode={hasDeletePin ? "verify" : "setup"}
-          confirmLabel={hasDeletePin ? "Delete" : "Set & Delete"}
+        <ConfirmModal
+          title="Delete this job?"
+          message="This permanently removes the job from your account. This confirmation prevents accidental clicks; Firebase ownership rules enforce who may delete it."
+          confirmLabel="Delete"
+          danger
           onCancel={() => setDeleteTarget(null)}
-          onConfirm={confirmDeleteWithPin}
+          onConfirm={confirmDelete}
         />
       )}
 

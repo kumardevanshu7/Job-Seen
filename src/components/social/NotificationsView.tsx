@@ -1,7 +1,7 @@
 import { useStore } from "@nanostores/react";
 import { $notifications } from "../../stores/notificationStore";
 import { $auth } from "../../stores/authStore";
-import { respondToRequest, markNotificationRead } from "../../lib/firestore";
+import { respondToRequest } from "../../lib/firestore";
 import { ToastProvider, showToast } from "../ui/Toast";
 import { useState } from "react";
 
@@ -21,12 +21,11 @@ export default function NotificationsView() {
   const auth = useStore($auth);
   const [responding, setResponding] = useState<string | null>(null);
 
-  async function respond(notifId: string, requestId: string, senderUID: string, action: "accepted" | "declined") {
+  async function respond(notifId: string, requestId: string, action: "accepted" | "declined") {
     if (!auth.user) return;
     setResponding(notifId);
     try {
-      await respondToRequest(requestId, action, senderUID, auth.user.uid);
-      await markNotificationRead(notifId);
+      await respondToRequest(requestId, notifId, action, auth.user.uid);
       showToast(action === "accepted" ? "Connection accepted." : "Request declined.", action === "accepted" ? "success" : "info");
     } catch {
       showToast("Something went wrong.", "error");
@@ -59,7 +58,7 @@ export default function NotificationsView() {
           <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
             <button
               className="btn btn-success btn-sm"
-              onClick={() => respond(notif.id, notif.requestId, notif.senderUID, "accepted")}
+              onClick={() => respond(notif.id, notif.requestId, "accepted")}
               disabled={responding === notif.id}
             >
               {responding === notif.id
@@ -69,7 +68,7 @@ export default function NotificationsView() {
             </button>
             <button
               className="btn btn-ghost btn-sm"
-              onClick={() => respond(notif.id, notif.requestId, notif.senderUID, "declined")}
+              onClick={() => respond(notif.id, notif.requestId, "declined")}
               disabled={responding === notif.id}
               style={{ color: "var(--mute)" }}
             >

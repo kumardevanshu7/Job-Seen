@@ -1,18 +1,17 @@
 import { useEffect, useState } from "react";
 import { useStore } from "@nanostores/react";
-import { $auth, setAuthState } from "../../stores/authStore";
+import { $auth } from "../../stores/authStore";
 import {
   getJobById,
   deleteJob,
   updateJobStatus,
-  setUserDeletePin,
-  verifyUserDeletePin,
   type JobCard as JobCardType,
   type JobStatus,
 } from "../../lib/firestore";
 import { ToastProvider, showToast } from "../ui/Toast";
-import DeletePinModal from "../ui/DeletePinModal";
+import ConfirmModal from "../ui/ConfirmModal";
 import ShimmerSkeleton from "../ui/ShimmerSkeleton";
+import { safeExternalUrl } from "../../lib/security";
 
 const STATUS_CONFIG: Record<JobStatus, { label: string; color: string; bg: string; border: string }> = {
   pending:         { label: "Not Applied",       color: "#c0392b", bg: "#fff5f5", border: "#f5c6c6" },
@@ -81,8 +80,9 @@ function esc(s: string): string {
 }
 
 function rowHtml(label: string, value: string, href?: string) {
-  const body = href
-    ? `<a href="${esc(href)}" target="_blank" rel="noopener noreferrer">${esc(value)}</a>`
+  const safeHref = safeExternalUrl(href);
+  const body = safeHref
+    ? `<a href="${esc(safeHref)}" target="_blank" rel="noopener noreferrer">${esc(value)}</a>`
     : esc(value);
   return `
     <div class="row">
@@ -211,7 +211,7 @@ function buildShareHtml(job: JobCardType): string {
         ${extra}
         ${job.applyLink ? rowHtml("Apply link", job.applyLink, job.applyLink) : rowHtml("Apply link", "—")}
       </div>
-      ${job.applyLink ? `<a class="cta" href="${esc(job.applyLink)}" target="_blank" rel="noopener noreferrer">Open Apply Link ↗</a>` : ""}
+      ${safeExternalUrl(job.applyLink) ? `<a class="cta" href="${esc(safeExternalUrl(job.applyLink)!)}" target="_blank" rel="noopener noreferrer">Open Apply Link ↗</a>` : ""}
     </div>
     <div class="product-box">
       <div class="tag">Shareable job card</div>
@@ -224,6 +224,7 @@ function buildShareHtml(job: JobCardType): string {
 }
 
 function DetailRow({ label, value, href }: { label: string; value: React.ReactNode; href?: string }) {
+  const safeHref = safeExternalUrl(href);
   return (
     <div style={{
       border: "1.5px solid var(--hairline)",
@@ -237,8 +238,8 @@ function DetailRow({ label, value, href }: { label: string; value: React.ReactNo
       }}>
         {label}
       </div>
-      {href && value && value !== "—" ? (
-        <a href={href} target="_blank" rel="noopener noreferrer"
+      {safeHref && value && value !== "—" ? (
+        <a href={safeHref} target="_blank" rel="noopener noreferrer"
           style={{ fontSize: 14, fontWeight: 600, color: "var(--ink)", wordBreak: "break-all" }}>
           {value}
         </a>
@@ -272,7 +273,6 @@ export default function JobDetailsView() {
     };
   }, []);
 
-  const hasDeletePin = !!auth.profile?.deletePinHash;
   const isOwner = !!(auth.user && job && auth.user.uid === job.ownerUID);
   const status = (job?.status ?? "pending") as JobStatus;
   const cfg = STATUS_CONFIG[status] ?? STATUS_CONFIG.pending;
@@ -332,17 +332,8 @@ export default function JobDetailsView() {
     showToast("HTML card downloaded — dost ko bhejo, browser me open hoga.", "success");
   }
 
-  async function confirmDeleteWithPin(pin: string) {
+  async function confirmDelete() {
     if (!job || !auth.user) return;
-    if (!hasDeletePin) {
-      const hash = await setUserDeletePin(auth.user.uid, pin);
-      setAuthState({
-        profile: auth.profile ? { ...auth.profile, deletePinHash: hash } : auth.profile,
-      });
-    } else {
-      const ok = await verifyUserDeletePin(auth.user.uid, pin, auth.profile?.deletePinHash);
-      if (!ok) throw new Error("Galat code. Dobara try karo.");
-    }
     await deleteJob(job.id);
     showToast("Job removed.", "info");
     window.location.href = "/";
@@ -371,11 +362,13 @@ export default function JobDetailsView() {
     <>
       <ToastProvider />
       {deleteOpen && (
-        <DeletePinModal
-          mode={hasDeletePin ? "verify" : "setup"}
-          confirmLabel={hasDeletePin ? "Delete" : "Set & Delete"}
+        <ConfirmModal
+          title="Delete this job?"
+          message="This permanently removes the job. Firestore verifies that only the authenticated owner can delete it."
+          confirmLabel="Delete"
+          danger
           onCancel={() => setDeleteOpen(false)}
-          onConfirm={confirmDeleteWithPin}
+          onConfirm={confirmDelete}
         />
       )}
 
@@ -412,8 +405,8 @@ export default function JobDetailsView() {
             <button type="button" className="btn btn-primary" onClick={downloadDetails}>
               ↓ Download
             </button>
-            {job.applyLink && (
-              <a href={job.applyLink} target="_blank" rel="noopener noreferrer" className="btn btn-secondary" style={{ textDecoration: "none" }}>
+            {safeExternalUrl(job.applyLink) && (
+              <a href={safeExternalUrl(job.applyLink)!} target="_blank" rel="noopener noreferrer" className="btn btn-secondary" style={{ textDecoration: "none" }}>
                 Open Link ↗
               </a>
             )}
