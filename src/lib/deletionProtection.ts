@@ -157,6 +157,40 @@ export function deleteBruteForceJobWithAnswer(uid: string, leadId: string, answe
   return deleteWithAnswer(uid, "bruteForceJobs", leadId, answer);
 }
 
+export async function deleteBruteForceJobsWithAnswer(
+  uid: string,
+  leadIds: string[],
+  answer: string
+): Promise<number> {
+  const uniqueIds = [...new Set(leadIds.filter(Boolean))];
+  if (uniqueIds.length === 0) throw new Error("Delete karne ke liye cards select karo.");
+
+  const question = await getDeletionQuestion(uid);
+  if (!question) throw new Error("NO_DELETION_QUESTION");
+  const answerDigest = await digestDeletionAnswer(answer);
+
+  // Firestore atomic writes have a shared rules document-access budget. Small
+  // chunks keep every target-specific proof verifiable without hitting it.
+  const chunkSize = 15;
+  for (let index = 0; index < uniqueIds.length; index += chunkSize) {
+    const batch = writeBatch(db);
+    uniqueIds.slice(index, index + chunkSize).forEach(leadId => {
+      const proofId = `bruteForceJobs__${leadId}`;
+      batch.set(doc(db, "deletionProofs", uid, "targets", proofId), {
+        uid,
+        kind: "bruteForceJobs",
+        targetId: leadId,
+        answerDigest,
+        secretVersion: question.version,
+        createdAt: serverTimestamp(),
+      });
+      batch.delete(doc(db, "bruteForceJobs", leadId));
+    });
+    await batch.commit();
+  }
+  return uniqueIds.length;
+}
+
 export function deletionProtectionError(error: unknown): string {
   const value = error as { code?: string; message?: string };
   if (value?.message === "NO_DELETION_QUESTION") {

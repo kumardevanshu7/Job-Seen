@@ -19,7 +19,11 @@ import {
 } from "../../lib/firestore";
 import { safeExternalUrl } from "../../lib/security";
 import { WALK_IN_ENABLED } from "../../lib/features";
-import { deleteBruteForceJobWithAnswer, deletionProtectionError } from "../../lib/deletionProtection";
+import {
+  deleteBruteForceJobWithAnswer,
+  deleteBruteForceJobsWithAnswer,
+  deletionProtectionError,
+} from "../../lib/deletionProtection";
 import { ToastProvider, showToast } from "../ui/Toast";
 import ShimmerSkeleton from "../ui/ShimmerSkeleton";
 import DeletionChallengeModal from "../ui/DeletionChallengeModal";
@@ -169,6 +173,8 @@ interface LeadCardProps {
   onOutcome: (lead: BruteForceJob, outcome: BruteForceCallOutcome) => void;
   onDecision: (lead: BruteForceJob, decision: Exclude<BruteForceDecision, "pending">) => void;
   canDelete: boolean;
+  selected: boolean;
+  onToggleSelected: (leadId: string) => void;
   onDelete: (lead: BruteForceJob) => void;
 }
 
@@ -185,13 +191,30 @@ function LeadCard(props: LeadCardProps) {
   const phoneHref = lead.phone ? `tel:${lead.phone.replace(/[^\d+]/g, "")}` : null;
 
   return (
-    <article style={{ border: `1px solid ${status.border}`, borderRadius: 10, padding: 18, background: status.bg }}>
+    <article style={{
+      border: `${props.selected ? 2 : 1}px solid ${props.selected ? status.color : status.border}`,
+      borderRadius: 10,
+      padding: props.selected ? 17 : 18,
+      background: status.bg,
+      boxShadow: props.selected ? `0 0 0 3px ${status.border}` : "none",
+      transition: "border-color 140ms ease, box-shadow 140ms ease",
+    }}>
       <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "flex-start", flexWrap: "wrap" }}>
-        <div>
-          <div style={{ fontSize: 16, fontWeight: 750, color: "var(--ink)" }}>{lead.company}</div>
-          <div style={{ fontSize: 13, color: "var(--body)", marginTop: 3 }}>{lead.role}</div>
-          <div style={{ fontSize: 12, color: "var(--mute)", marginTop: 5 }}>{lead.location}</div>
-        </div>
+        <label style={{ display: "flex", alignItems: "flex-start", gap: 11, cursor: "pointer", flex: 1, minWidth: 180 }}>
+          <input
+            type="checkbox"
+            checked={props.selected}
+            disabled={busy || !props.canDelete}
+            onChange={() => props.onToggleSelected(lead.id)}
+            aria-label={`Select ${lead.company}`}
+            style={{ width: 18, height: 18, margin: "2px 0 0", accentColor: status.color, flexShrink: 0, cursor: "pointer" }}
+          />
+          <span>
+            <span style={{ display: "block", fontSize: 16, fontWeight: 750, color: "var(--ink)" }}>{lead.company}</span>
+            <span style={{ display: "block", fontSize: 13, color: "var(--body)", marginTop: 3 }}>{lead.role}</span>
+            <span style={{ display: "block", fontSize: 12, color: "var(--mute)", marginTop: 5 }}>{lead.location}</span>
+          </span>
+        </label>
         <span style={{ color: status.color, background: "var(--canvas)", border: `1px solid ${status.border}`, borderRadius: 999, padding: "5px 9px", fontSize: 11, fontWeight: 700 }}>
           {status.label}
         </span>
@@ -362,6 +385,10 @@ export default function BruteForceJobsView() {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<BruteForceJob | null>(null);
   const [deleteError, setDeleteError] = useState("");
+  const [selectedLeadIds, setSelectedLeadIds] = useState<Set<string>>(() => new Set());
+  const [bulkDeleteIds, setBulkDeleteIds] = useState<string[] | null>(null);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
+  const [bulkDeleteError, setBulkDeleteError] = useState("");
   const [now, setNow] = useState(Date.now());
 
   const [scheduleId, setScheduleId] = useState<string | null>(null);
@@ -373,6 +400,8 @@ export default function BruteForceJobsView() {
     if (!auth.user) return;
     const unsubscribeLeads = subscribeToBruteForceJobs(auth.user.uid, data => {
       setLeads(data);
+      const existingIds = new Set(data.map(lead => lead.id));
+      setSelectedLeadIds(current => new Set([...current].filter(id => existingIds.has(id))));
       setLoading(false);
     });
     const unsubscribeRouteJobs = WALK_IN_ENABLED
@@ -419,6 +448,53 @@ export default function BruteForceJobsView() {
     },
   ];
   const visibleSection = sections.find(section => section.id === activeSection) ?? sections[0];
+  const visibleLeadIds = visibleSection.items.map(lead => lead.id);
+  const allVisibleSelected = visibleLeadIds.length > 0 && visibleLeadIds.every(id => selectedLeadIds.has(id));
+
+  function toggleLeadSelection(leadId: string) {
+    setSelectedLeadIds(current => {
+      const next = new Set(current);
+      if (next.has(leadId)) next.delete(leadId);
+      else next.add(leadId);
+      return next;
+    });
+  }
+
+  function toggleVisibleSelection() {
+    setSelectedLeadIds(current => {
+      const next = new Set(current);
+      if (allVisibleSelected) visibleLeadIds.forEach(id => next.delete(id));
+      else visibleLeadIds.forEach(id => next.add(id));
+      return next;
+    });
+  }
+
+  function openBulkDelete() {
+    const ids = [...selectedLeadIds];
+    if (ids.length === 0) {
+      showToast("Pehle cards select karo.", "error");
+      return;
+    }
+    setBulkDeleteError("");
+    setBulkDeleteIds(ids);
+  }
+
+  async function confirmBulkDelete(answer: string) {
+    if (!auth.user || !bulkDeleteIds?.length) return;
+    setBulkDeleting(true);
+    setBulkDeleteError("");
+    try {
+      const deletedCount = await deleteBruteForceJobsWithAnswer(auth.user.uid, bulkDeleteIds, answer);
+      const deletedIds = new Set(bulkDeleteIds);
+      setSelectedLeadIds(current => new Set([...current].filter(id => !deletedIds.has(id))));
+      setBulkDeleteIds(null);
+      showToast(`${deletedCount} Brute Force cards delete ho gaye.`, "info");
+    } catch (error) {
+      setBulkDeleteError(deletionProtectionError(error));
+    } finally {
+      setBulkDeleting(false);
+    }
+  }
 
   function setField(key: keyof typeof INITIAL_FORM, value: string) {
     setForm(prev => ({ ...prev, [key]: value }));
@@ -646,6 +722,17 @@ export default function BruteForceJobsView() {
           error={deleteError}
           onCancel={() => { if (busyId !== deleteTarget.id) { setDeleteTarget(null); setDeleteError(""); } }}
           onConfirm={confirmDelete}
+        />
+      )}
+      {bulkDeleteIds && auth.user && (
+        <DeletionChallengeModal
+          uid={auth.user.uid}
+          title={`Delete ${bulkDeleteIds.length} selected cards?`}
+          targetLabel={`${bulkDeleteIds.length} selected Brute Force cards`}
+          busy={bulkDeleting}
+          error={bulkDeleteError}
+          onCancel={() => { if (!bulkDeleting) { setBulkDeleteIds(null); setBulkDeleteError(""); } }}
+          onConfirm={confirmBulkDelete}
         />
       )}
       <style>{`
@@ -935,6 +1022,39 @@ export default function BruteForceJobsView() {
         role="tabpanel"
         aria-labelledby={`lead-tab-${activeSection}`}
       >
+        {visibleSection.items.length > 0 && (
+          <div style={{
+            display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12,
+            flexWrap: "wrap", padding: "10px 12px", marginBottom: 14,
+            border: "1px solid var(--hairline)", borderRadius: 8,
+            background: selectedLeadIds.size > 0 ? "#fff7ed" : "var(--surface-soft)",
+          }}>
+            <label style={{ display: "inline-flex", alignItems: "center", gap: 8, cursor: "pointer", fontSize: 12, fontWeight: 700, color: "var(--ink)" }}>
+              <input
+                type="checkbox"
+                checked={allVisibleSelected}
+                onChange={toggleVisibleSelection}
+                style={{ width: 17, height: 17, accentColor: "var(--ink)", cursor: "pointer" }}
+              />
+              {allVisibleSelected ? "Unselect this tab" : `Select all in ${visibleSection.label}`}
+            </label>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+              <span style={{ fontSize: 11, fontWeight: 700, color: selectedLeadIds.size > 0 ? "#9a3412" : "var(--mute)" }}>
+                {selectedLeadIds.size} selected
+              </span>
+              {selectedLeadIds.size > 0 && (
+                <>
+                  <button type="button" className="btn btn-ghost btn-sm" disabled={bulkDeleting} onClick={() => setSelectedLeadIds(new Set())}>
+                    Clear
+                  </button>
+                  <button type="button" className="btn btn-danger btn-sm" disabled={bulkDeleting} onClick={openBulkDelete}>
+                    Delete selected ({selectedLeadIds.size})
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+        )}
         {visibleSection.items.length === 0 ? (
           <div className="empty-state">
             <div className="empty-state-title">{visibleSection.emptyTitle}</div>
@@ -963,6 +1083,8 @@ export default function BruteForceJobsView() {
                   onOutcome={isActiveLead ? handleOutcome : () => {}}
                   onDecision={isActiveLead ? handleDecision : () => {}}
                   canDelete={auth.user?.uid === lead.ownerUID}
+                  selected={selectedLeadIds.has(lead.id)}
+                  onToggleSelected={toggleLeadSelection}
                   onDelete={leadToDelete => { setDeleteError(""); setDeleteTarget(leadToDelete); }}
                 />
               );
