@@ -190,6 +190,9 @@ export function subscribeToUserJobs(
       return tB - tA;
     });
     callback(jobs);
+  }, error => {
+    console.error("Firestore listener [user jobs] failed", error);
+    callback([]);
   });
 }
 
@@ -278,6 +281,9 @@ export function subscribeToBruteForceJobs(
       return bTime - aTime;
     });
     callback(jobs);
+  }, error => {
+    console.error("Firestore listener [brute-force jobs] failed", error);
+    callback([]);
   });
 }
 
@@ -469,8 +475,14 @@ export function subscribeToMessages(
     );
     unsubscribe = onSnapshot(q, snap => {
       callback(snap.docs.map(d => ({ id: d.id, ...d.data() } as ChatMessage)));
+    }, error => {
+      console.error("Firestore listener [chat messages] failed", error);
+      callback([]);
     });
-  }).catch(() => callback([]));
+  }).catch(error => {
+    console.error("Firestore chat initialization failed", error);
+    callback([]);
+  });
   return () => { stopped = true; unsubscribe(); };
 }
 
@@ -511,8 +523,13 @@ export function subscribeToUnreadChatCount(
       unsubscribe = onSnapshot(q, snap => {
         counts[chatId] = snap.size;
         callback(Object.values(counts).reduce((a, b) => a + b, 0), { ...counts });
+      }, error => {
+        console.error(`Firestore listener [unread chat ${chatId}] failed`, error);
+        counts[chatId] = 0;
+        callback(Object.values(counts).reduce((a, b) => a + b, 0), { ...counts });
       });
-    }).catch(() => {
+    }).catch(error => {
+      console.error(`Firestore chat badge initialization [${chatId}] failed`, error);
       counts[chatId] = 0;
       callback(Object.values(counts).reduce((a, b) => a + b, 0), { ...counts });
     });
@@ -649,21 +666,11 @@ export async function getConnections(uid: string): Promise<Connection[]> {
   for (const snapshot of [...snapA.docs, ...snapB.docs]) {
     const connection = { id: snapshot.id, ...snapshot.data() } as Connection;
     const pairId = canonicalPairId(connection.userA, connection.userB);
-    if (connection.id !== pairId) {
-      const canonicalRef = doc(db, "connections", pairId);
-      // Only backfill once — writing again after the canonical doc exists
-      // would be an "update", which the connections rules always deny.
-      const canonicalSnap = await getDoc(canonicalRef);
-      if (!canonicalSnap.exists()) {
-        await setDoc(canonicalRef, {
-          userA: [connection.userA, connection.userB].sort()[0],
-          userB: [connection.userA, connection.userB].sort()[1],
-          connectedAt: connection.connectedAt,
-          legacyConnectionId: connection.id,
-        });
-      }
-      connection.id = pairId;
-    }
+
+    // Keep browser reads read-only. A get() for a missing canonical document is
+    // correctly denied by participant-based rules because resource.data does not
+    // exist. Legacy documents must be backfilled with a trusted Admin SDK script.
+    connection.id = pairId;
     byPair.set(pairId, connection);
   }
   return [...byPair.values()];
@@ -748,6 +755,9 @@ export function subscribeToNotifications(
       return tB - tA;
     });
     callback(notifs);
+  }, error => {
+    console.error("Firestore listener [notifications] failed", error);
+    callback([]);
   });
 }
 

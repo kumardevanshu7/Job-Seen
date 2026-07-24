@@ -17,9 +17,9 @@ function sleep(ms: number) {
 }
 
 /**
- * Right after sign-in, Firestore's auth token can take a moment to propagate.
- * A request in that short window can fail with permission-denied even though
- * the rules are correct. Retry a couple of times before treating it as real.
+ * A short bounded retry protects profile loading from transient failures only.
+ * Persistent permission errors are not assumed to be auth propagation issues;
+ * the caller reports the profile stage explicitly after retries are exhausted.
  */
 async function withAuthPropagationRetry<T>(task: () => Promise<T>): Promise<T> {
   const delays = [300, 800, 1500];
@@ -70,41 +70,62 @@ export default function AuthProvider({ children, requireAdmin = false }: Props) 
         return;
       }
 
+      let admin: boolean;
       try {
-        const [admin, profile] = await withAuthPropagationRetry(() => Promise.all([
-          hasAdminClaim(user),
-          getUserProfile(user.uid),
-        ]));
+        admin = await hasAdminClaim(user);
+      } catch (err) {
         if (disposed || currentGeneration !== generation) return;
+        console.error("AuthProvider: failed to read the Firebase admin claim", err);
+        setAuthState({ user, profile: null, isAdmin: false, loading: false, initialized: true });
+        setState({ loading: false, needsUsername: false, notAdmin: false, loadError: true });
+        return;
+      }
 
-        if (requireAdmin && !admin) {
-          setAuthState({ user, profile: null, isAdmin: false, loading: false, initialized: true });
-          setState({ loading: false, needsUsername: false, notAdmin: true, loadError: false });
-          return;
-        }
+      let profile;
+      try {
+        profile = await withAuthPropagationRetry(() => getUserProfile(user.uid));
+      } catch (err) {
+        if (disposed || currentGeneration !== generation) return;
+        console.error("AuthProvider: failed to read the signed-in user's profile", err);
+        setAuthState({ user, profile: null, isAdmin: admin, loading: false, initialized: true });
+        setState({ loading: false, needsUsername: false, notAdmin: false, loadError: true });
+        return;
+      }
 
-        if (!profile?.username) {
-          setAuthState({ user, profile: null, isAdmin: admin, loading: false, initialized: true });
-          setState({ loading: false, needsUsername: true, notAdmin: false, loadError: false });
-          return;
-        }
+      if (disposed || currentGeneration !== generation) return;
 
-        setAuthState({ user, profile, isAdmin: admin, loading: false, initialized: true });
-        setState({ loading: false, needsUsername: false, notAdmin: false, loadError: false });
+      if (requireAdmin && !admin) {
+        setAuthState({ user, profile: null, isAdmin: false, loading: false, initialized: true });
+        setState({ loading: false, needsUsername: false, notAdmin: true, loadError: false });
+        return;
+      }
+
+      if (!profile?.username) {
+        setAuthState({ user, profile: null, isAdmin: admin, loading: false, initialized: true });
+        setState({ loading: false, needsUsername: true, notAdmin: false, loadError: false });
+        return;
+      }
+
+      // The account is valid at this point. Optional badges/listeners must never
+      // turn a signed-in account into a global account-loading failure.
+      setAuthState({ user, profile, isAdmin: admin, loading: false, initialized: true });
+      setState({ loading: false, needsUsername: false, notAdmin: false, loadError: false });
+
+      try {
         unsubscribeNotifications = subscribeToNotifications(user.uid, setNotifications);
+      } catch (err) {
+        console.error("AuthProvider: failed to start notifications listener", err);
+        setNotifications([]);
+      }
 
+      try {
         const connectedUIDs = await getConnectedUIDs(user.uid);
-        if (disposed || currentGeneration !== generation) {
-          unsubscribeNotifications?.();
-          return;
-        }
+        if (disposed || currentGeneration !== generation) return;
         unsubscribeChats = subscribeToUnreadChatCount(user.uid, connectedUIDs, setUnreadChatCount);
       } catch (err) {
         if (disposed || currentGeneration !== generation) return;
-        // Never silently render the app with a null profile — surface the failure instead.
-        console.error("AuthProvider: failed to load user profile/admin claim", err);
-        setAuthState({ user, profile: null, isAdmin: false, loading: false, initialized: true });
-        setState({ loading: false, needsUsername: false, notAdmin: false, loadError: true });
+        console.error("AuthProvider: failed to initialize optional chat badges", err);
+        setUnreadChatCount(0, {});
       }
     });
 
