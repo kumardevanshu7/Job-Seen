@@ -650,12 +650,18 @@ export async function getConnections(uid: string): Promise<Connection[]> {
     const connection = { id: snapshot.id, ...snapshot.data() } as Connection;
     const pairId = canonicalPairId(connection.userA, connection.userB);
     if (connection.id !== pairId) {
-      await setDoc(doc(db, "connections", pairId), {
-        userA: [connection.userA, connection.userB].sort()[0],
-        userB: [connection.userA, connection.userB].sort()[1],
-        connectedAt: connection.connectedAt,
-        legacyConnectionId: connection.id,
-      });
+      const canonicalRef = doc(db, "connections", pairId);
+      // Only backfill once — writing again after the canonical doc exists
+      // would be an "update", which the connections rules always deny.
+      const canonicalSnap = await getDoc(canonicalRef);
+      if (!canonicalSnap.exists()) {
+        await setDoc(canonicalRef, {
+          userA: [connection.userA, connection.userB].sort()[0],
+          userB: [connection.userA, connection.userB].sort()[1],
+          connectedAt: connection.connectedAt,
+          legacyConnectionId: connection.id,
+        });
+      }
       connection.id = pairId;
     }
     byPair.set(pairId, connection);
