@@ -3,13 +3,13 @@ import { useStore } from "@nanostores/react";
 import { $auth } from "../../stores/authStore";
 import {
   getJobById,
-  deleteJob,
   updateJobStatus,
   type JobCard as JobCardType,
   type JobStatus,
 } from "../../lib/firestore";
+import { deleteJobWithAnswer, deletionProtectionError } from "../../lib/deletionProtection";
 import { ToastProvider, showToast } from "../ui/Toast";
-import ConfirmModal from "../ui/ConfirmModal";
+import DeletionChallengeModal from "../ui/DeletionChallengeModal";
 import ShimmerSkeleton from "../ui/ShimmerSkeleton";
 import { safeExternalUrl } from "../../lib/security";
 
@@ -259,6 +259,8 @@ export default function JobDetailsView() {
   const [notFound, setNotFound] = useState(false);
   const [updating, setUpdating] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleteBusy, setDeleteBusy] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
 
   const [jobId, setJobId] = useState(() => jobIdFromUrl());
 
@@ -332,11 +334,19 @@ export default function JobDetailsView() {
     showToast("HTML card downloaded — dost ko bhejo, browser me open hoga.", "success");
   }
 
-  async function confirmDelete() {
+  async function confirmDelete(answer: string) {
     if (!job || !auth.user) return;
-    await deleteJob(job.id);
-    showToast("Job removed.", "info");
-    window.location.href = "/";
+    setDeleteBusy(true);
+    setDeleteError("");
+    try {
+      await deleteJobWithAnswer(auth.user.uid, job.id, answer);
+      showToast("Job removed.", "info");
+      window.location.href = "/";
+    } catch (error) {
+      setDeleteError(deletionProtectionError(error));
+    } finally {
+      setDeleteBusy(false);
+    }
   }
 
   if (loading) return <><ToastProvider /><ShimmerSkeleton variant="jobs" count={2} /></>;
@@ -361,13 +371,14 @@ export default function JobDetailsView() {
   return (
     <>
       <ToastProvider />
-      {deleteOpen && (
-        <ConfirmModal
+      {deleteOpen && auth.user && (
+        <DeletionChallengeModal
+          uid={auth.user.uid}
           title="Delete this job?"
-          message="This permanently removes the job. Firestore verifies that only the authenticated owner can delete it."
-          confirmLabel="Delete"
-          danger
-          onCancel={() => setDeleteOpen(false)}
+          targetLabel="This job"
+          busy={deleteBusy}
+          error={deleteError}
+          onCancel={() => { if (!deleteBusy) { setDeleteOpen(false); setDeleteError(""); } }}
           onConfirm={confirmDelete}
         />
       )}
@@ -411,7 +422,7 @@ export default function JobDetailsView() {
               </a>
             )}
             {isOwner && (
-              <button type="button" className="btn btn-secondary" onClick={() => setDeleteOpen(true)} style={{ color: "#c0392b", borderColor: "#e0a8a8" }}>
+              <button type="button" className="btn btn-secondary" onClick={() => { setDeleteError(""); setDeleteOpen(true); }} style={{ color: "#c0392b", borderColor: "#e0a8a8" }}>
                 Delete
               </button>
             )}

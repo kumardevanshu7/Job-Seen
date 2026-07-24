@@ -233,3 +233,15 @@ Firebase Emulator Suite free hai aur local mein Firestore rules test karne deta 
 ---
 
 *Yeh document JobSeen codebase ke security audit (July 2026) ke baad likha gaya. Isko apne future projects ke liye reference guide ki tarah use karo.*
+
+---
+
+## 13. Security-question Deletion Protection
+
+**Requirement:** Standard aur Brute Force job delete karne se pehle user ka configured question poocha jaaye aur correct answer required ho.
+
+**Secure implementation:** Isko client-only comparison nahi banaya gaya. Question `deletionQuestions/{uid}` mein self-readable hai, lekin normalized answer ka SHA-256 digest `deletionSecrets/{uid}` mein hai aur client us document ko read/list nahi kar sakta. Delete ke waqt client ek target-specific proof aur job deletion ko **same Firestore batch** mein bhejta hai. Rules `getAfter()` se verify karti hain ki proof ka digest/version unreadable secret se match kare aur proof ka `createdAt` current `request.time` ho. Isliye purana proof replay karke ya modal bypass karke direct owner delete request bhejna reject hota hai. Admin custom claim recovery ke liye bypass retain karta hai.
+
+**Change protection:** Question/answer change karne ke liye current answer ka fresh same-batch proof required hai. Secret version increment hota hai, isliye old version ke proofs invalid ho jaate hain. App mein client-side “forgot answer” reset nahi hai; trusted admin recovery required hai.
+
+**Limitations:** Yeh app-defined destructive-action safeguard hai, Firebase login reauthentication ya account password ka replacement nahi. Security questions naturally guessable ho sakte hain, Firestore Rules rate limiting provide nahi karti, aur SHA-256 password hashing algorithm nahi hai. Isliye minimum 8-character non-obvious answer rakha gaya hai. High-risk app mein Firebase reauthentication aur trusted backend with rate limiting/preferably memory-hard password hashing stronger option hai.

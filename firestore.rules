@@ -46,6 +46,70 @@ service cloud.firestore {
         && data.updatedAt is timestamp;
     }
 
+    function validDeletionQuestion(data, uid) {
+      return data.keys().hasAll(['uid', 'question', 'version', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['uid', 'question', 'version', 'createdAt', 'updatedAt'])
+        && data.uid == uid
+        && data.question is string
+        && data.question.size() >= 5
+        && data.question.size() <= 160
+        && data.version is int
+        && data.version >= 1
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function validDeletionSecret(data, uid) {
+      return data.keys().hasAll(['uid', 'answerDigest', 'version', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['uid', 'answerDigest', 'version', 'createdAt', 'updatedAt'])
+        && data.uid == uid
+        && data.answerDigest is string
+        && data.answerDigest.matches('^[0-9a-f]{64}$')
+        && data.version is int
+        && data.version >= 1
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function validDeletionProof(data, uid, proofId) {
+      return data.keys().hasAll(['uid', 'kind', 'targetId', 'answerDigest', 'secretVersion', 'createdAt'])
+        && data.keys().hasOnly(['uid', 'kind', 'targetId', 'answerDigest', 'secretVersion', 'createdAt'])
+        && data.uid == uid
+        && data.kind in ['jobs', 'bruteForceJobs', 'settings-change']
+        && data.targetId is string
+        && data.targetId.size() >= 1
+        && data.targetId.size() <= 1500
+        && proofId == data.kind + '__' + data.targetId
+        && data.answerDigest is string
+        && data.answerDigest.matches('^[0-9a-f]{64}$')
+        && data.secretVersion is int
+        && data.secretVersion >= 1
+        && data.createdAt is timestamp;
+    }
+
+    function validCurrentAnswerProof(uid) {
+      return exists(/databases/$(database)/documents/deletionSecrets/$(uid))
+        && existsAfter(/databases/$(database)/documents/deletionProofs/$(uid)/targets/settings-change__secret)
+        && getAfter(/databases/$(database)/documents/deletionProofs/$(uid)/targets/settings-change__secret).data.uid == uid
+        && getAfter(/databases/$(database)/documents/deletionProofs/$(uid)/targets/settings-change__secret).data.kind == 'settings-change'
+        && getAfter(/databases/$(database)/documents/deletionProofs/$(uid)/targets/settings-change__secret).data.targetId == 'secret'
+        && getAfter(/databases/$(database)/documents/deletionProofs/$(uid)/targets/settings-change__secret).data.answerDigest == get(/databases/$(database)/documents/deletionSecrets/$(uid)).data.answerDigest
+        && getAfter(/databases/$(database)/documents/deletionProofs/$(uid)/targets/settings-change__secret).data.secretVersion == get(/databases/$(database)/documents/deletionSecrets/$(uid)).data.version
+        && getAfter(/databases/$(database)/documents/deletionProofs/$(uid)/targets/settings-change__secret).data.createdAt == request.time;
+    }
+
+    function validFreshDeletionProof(kind, targetId, proofId) {
+      return signedIn()
+        && exists(/databases/$(database)/documents/deletionSecrets/$(request.auth.uid))
+        && existsAfter(/databases/$(database)/documents/deletionProofs/$(request.auth.uid)/targets/$(proofId))
+        && getAfter(/databases/$(database)/documents/deletionProofs/$(request.auth.uid)/targets/$(proofId)).data.uid == request.auth.uid
+        && getAfter(/databases/$(database)/documents/deletionProofs/$(request.auth.uid)/targets/$(proofId)).data.kind == kind
+        && getAfter(/databases/$(database)/documents/deletionProofs/$(request.auth.uid)/targets/$(proofId)).data.targetId == targetId
+        && getAfter(/databases/$(database)/documents/deletionProofs/$(request.auth.uid)/targets/$(proofId)).data.answerDigest == get(/databases/$(database)/documents/deletionSecrets/$(request.auth.uid)).data.answerDigest
+        && getAfter(/databases/$(database)/documents/deletionProofs/$(request.auth.uid)/targets/$(proofId)).data.secretVersion == get(/databases/$(database)/documents/deletionSecrets/$(request.auth.uid)).data.version
+        && getAfter(/databases/$(database)/documents/deletionProofs/$(request.auth.uid)/targets/$(proofId)).data.createdAt == request.time;
+    }
+
     function validPublicProfile(data) {
       return data.keys().hasAll(['uid', 'username', 'displayName', 'photoURL', 'createdAt', 'updatedAt'])
         && data.keys().hasOnly(['uid', 'username', 'displayName', 'photoURL', 'createdAt', 'updatedAt'])
@@ -261,6 +325,65 @@ service cloud.firestore {
       allow delete: if admin();
     }
 
+    match /deletionQuestions/{uid} {
+      allow get: if self(uid);
+      allow list: if false;
+      allow create: if self(uid)
+        && !exists(/databases/$(database)/documents/deletionQuestions/$(uid))
+        && !exists(/databases/$(database)/documents/deletionSecrets/$(uid))
+        && validDeletionQuestion(request.resource.data, uid)
+        && request.resource.data.version == 1
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.updatedAt == request.time
+        && validDeletionSecret(getAfter(/databases/$(database)/documents/deletionSecrets/$(uid)).data, uid)
+        && getAfter(/databases/$(database)/documents/deletionSecrets/$(uid)).data.version == 1
+        && getAfter(/databases/$(database)/documents/deletionSecrets/$(uid)).data.createdAt == request.time
+        && getAfter(/databases/$(database)/documents/deletionSecrets/$(uid)).data.updatedAt == request.time;
+      allow update: if self(uid)
+        && validDeletionQuestion(request.resource.data, uid)
+        && request.resource.data.uid == resource.data.uid
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.version == resource.data.version + 1
+        && request.resource.data.updatedAt == request.time
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['question', 'version', 'updatedAt'])
+        && validCurrentAnswerProof(uid)
+        && getAfter(/databases/$(database)/documents/deletionSecrets/$(uid)).data.version == request.resource.data.version;
+      allow delete: if false;
+    }
+
+    match /deletionSecrets/{uid} {
+      allow read: if false;
+      allow create: if self(uid)
+        && !exists(/databases/$(database)/documents/deletionSecrets/$(uid))
+        && validDeletionSecret(request.resource.data, uid)
+        && request.resource.data.version == 1
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.updatedAt == request.time
+        && validDeletionQuestion(getAfter(/databases/$(database)/documents/deletionQuestions/$(uid)).data, uid)
+        && getAfter(/databases/$(database)/documents/deletionQuestions/$(uid)).data.version == 1;
+      allow update: if self(uid)
+        && validDeletionSecret(request.resource.data, uid)
+        && request.resource.data.uid == resource.data.uid
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.version == resource.data.version + 1
+        && request.resource.data.updatedAt == request.time
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['answerDigest', 'version', 'updatedAt'])
+        && validCurrentAnswerProof(uid)
+        && getAfter(/databases/$(database)/documents/deletionQuestions/$(uid)).data.version == request.resource.data.version;
+      allow delete: if false;
+    }
+
+    match /deletionProofs/{uid}/targets/{proofId} {
+      allow read: if false;
+      allow create, update: if self(uid)
+        && validDeletionProof(request.resource.data, uid, proofId)
+        && request.resource.data.createdAt == request.time
+        && exists(/databases/$(database)/documents/deletionSecrets/$(uid))
+        && request.resource.data.answerDigest == get(/databases/$(database)/documents/deletionSecrets/$(uid)).data.answerDigest
+        && request.resource.data.secretVersion == get(/databases/$(database)/documents/deletionSecrets/$(uid)).data.version;
+      allow delete: if false;
+    }
+
     match /publicProfiles/{uid} {
       allow get: if signedIn();
       allow list: if admin();
@@ -310,7 +433,11 @@ service cloud.firestore {
         && request.resource.data.ownerUID == resource.data.ownerUID
         && request.resource.data.ownerUsername == resource.data.ownerUsername
         && request.resource.data.createdAt == resource.data.createdAt;
-      allow delete: if signedIn() && (resource.data.ownerUID == request.auth.uid || admin());
+      allow delete: if admin() || (
+        signedIn()
+        && resource.data.ownerUID == request.auth.uid
+        && validFreshDeletionProof('jobs', jobId, 'jobs__' + jobId)
+      );
     }
 
     match /bruteForceJobs/{leadId} {
@@ -374,7 +501,11 @@ service cloud.firestore {
             && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['decision', 'updatedAt'])
           )
         );
-      allow delete: if signedIn() && (resource.data.ownerUID == request.auth.uid || admin());
+      allow delete: if admin() || (
+        signedIn()
+        && resource.data.ownerUID == request.auth.uid
+        && validFreshDeletionProof('bruteForceJobs', leadId, 'bruteForceJobs__' + leadId)
+      );
     }
 
     match /friendRequests/{requestId} {

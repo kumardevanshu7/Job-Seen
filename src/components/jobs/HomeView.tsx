@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { useStore } from "@nanostores/react";
 import { $auth } from "../../stores/authStore";
-import { subscribeToUserJobs, deleteJob, updateJobStatus } from "../../lib/firestore";
+import { subscribeToUserJobs, updateJobStatus } from "../../lib/firestore";
 import type { JobCard as JobCardType, JobStatus } from "../../lib/firestore";
+import { deleteJobWithAnswer, deletionProtectionError } from "../../lib/deletionProtection";
 import JobCard from "./JobCard";
 import { ToastProvider, showToast } from "../ui/Toast";
-import ConfirmModal from "../ui/ConfirmModal";
+import DeletionChallengeModal from "../ui/DeletionChallengeModal";
 import ShimmerSkeleton from "../ui/ShimmerSkeleton";
 
 function toDate(d: any): Date | null {
@@ -33,6 +34,8 @@ export default function HomeView() {
   const [jobs, setJobs] = useState<JobCardType[]>([]);
   const [loading, setLoading] = useState(true);
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
+  const [deleteBusy, setDeleteBusy] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
   const [viewMode, setViewMode] = useState<string>("list");
   const [filterTab, setFilterTab] = useState<"all" | "mine" | "copied">("all");
   const [dateBasis, setDateBasis] = useState<"added" | "applied">("added");
@@ -68,6 +71,7 @@ export default function HomeView() {
   }, [auth.user]);
 
   function handleDelete(id: string) {
+    setDeleteError("");
     setDeleteTarget(id);
   }
 
@@ -75,11 +79,19 @@ export default function HomeView() {
     window.location.href = `/job?id=${encodeURIComponent(job.id)}`;
   }
 
-  async function confirmDelete() {
+  async function confirmDelete(answer: string) {
     if (!deleteTarget || !auth.user) return;
-    await deleteJob(deleteTarget);
-    showToast("Job removed.", "info");
-    setDeleteTarget(null);
+    setDeleteBusy(true);
+    setDeleteError("");
+    try {
+      await deleteJobWithAnswer(auth.user.uid, deleteTarget, answer);
+      showToast("Job removed.", "info");
+      setDeleteTarget(null);
+    } catch (error) {
+      setDeleteError(deletionProtectionError(error));
+    } finally {
+      setDeleteBusy(false);
+    }
   }
 
   const today = new Date(); today.setHours(0, 0, 0, 0);
@@ -150,13 +162,14 @@ export default function HomeView() {
     <>
       <ToastProvider />
 
-      {deleteTarget && (
-        <ConfirmModal
+      {deleteTarget && auth.user && (
+        <DeletionChallengeModal
+          uid={auth.user.uid}
           title="Delete this job?"
-          message="This permanently removes the job from your account. This confirmation prevents accidental clicks; Firebase ownership rules enforce who may delete it."
-          confirmLabel="Delete"
-          danger
-          onCancel={() => setDeleteTarget(null)}
+          targetLabel="This job"
+          busy={deleteBusy}
+          error={deleteError}
+          onCancel={() => { if (!deleteBusy) { setDeleteTarget(null); setDeleteError(""); } }}
           onConfirm={confirmDelete}
         />
       )}

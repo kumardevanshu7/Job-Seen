@@ -6,7 +6,6 @@ import {
   getDocs,
   setDoc,
   updateDoc,
-  deleteDoc,
   query,
   where,
   orderBy,
@@ -264,14 +263,6 @@ export async function getJobById(jobId: string): Promise<JobCard | null> {
   const snap = await getDoc(doc(db, "jobs", jobId));
   if (!snap.exists()) return null;
   return { id: snap.id, ...snap.data() } as JobCard;
-}
-
-export async function deleteJob(jobId: string): Promise<void> {
-  await deleteDoc(doc(db, "jobs", jobId));
-}
-
-export async function deleteBruteForceJob(jobId: string): Promise<void> {
-  await deleteDoc(doc(db, "bruteForceJobs", jobId));
 }
 
 // ─── Brute Force Job Leads ────────────────────────────────────────────────────

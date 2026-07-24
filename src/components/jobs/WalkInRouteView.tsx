@@ -5,14 +5,14 @@ import {
   subscribeToUserJobs,
   updateJobStatus,
   updateJobRouteOrder,
-  deleteJob,
   setJobOnRoute,
   type JobCard as JobCardType,
   type JobStatus,
 } from "../../lib/firestore";
 import { showToast, ToastProvider } from "../ui/Toast";
+import { deleteJobWithAnswer, deletionProtectionError } from "../../lib/deletionProtection";
 import ReasonModal from "../ui/ReasonModal";
-import ConfirmModal from "../ui/ConfirmModal";
+import DeletionChallengeModal from "../ui/DeletionChallengeModal";
 import ShimmerSkeleton from "../ui/ShimmerSkeleton";
 import { safeExternalUrl } from "../../lib/security";
 
@@ -52,6 +52,8 @@ export default function WalkInRouteView() {
   const [animating, setAnimating] = useState(false);
   const [cancelTarget, setCancelTarget] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
+  const [deleteBusy, setDeleteBusy] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
   const [pickerOpen, setPickerOpen] = useState(false);
 
   const itemRefs = useRef<Record<string, HTMLDivElement | null>>({});
@@ -192,11 +194,19 @@ export default function WalkInRouteView() {
     }
   }
 
-  async function confirmDelete() {
+  async function confirmDelete(answer: string) {
     if (!deleteTarget || !auth.user) return;
-    await deleteJob(deleteTarget);
-    showToast("Job deleted.", "info");
-    setDeleteTarget(null);
+    setDeleteBusy(true);
+    setDeleteError("");
+    try {
+      await deleteJobWithAnswer(auth.user.uid, deleteTarget, answer);
+      showToast("Job deleted.", "info");
+      setDeleteTarget(null);
+    } catch (error) {
+      setDeleteError(deletionProtectionError(error));
+    } finally {
+      setDeleteBusy(false);
+    }
   }
 
   const activeJob = routeJobs.find(j => j.id === activeId) ?? null;
@@ -220,13 +230,14 @@ export default function WalkInRouteView() {
         />
       )}
 
-      {deleteTarget && (
-        <ConfirmModal
+      {deleteTarget && auth.user && (
+        <DeletionChallengeModal
+          uid={auth.user.uid}
           title="Delete this job?"
-          message="This permanently removes the job. Only its Firebase-authenticated owner can complete this action."
-          confirmLabel="Delete"
-          danger
-          onCancel={() => setDeleteTarget(null)}
+          targetLabel="This route job"
+          busy={deleteBusy}
+          error={deleteError}
+          onCancel={() => { if (!deleteBusy) { setDeleteTarget(null); setDeleteError(""); } }}
           onConfirm={confirmDelete}
         />
       )}
@@ -653,6 +664,7 @@ export default function WalkInRouteView() {
                 className="btn btn-secondary"
                 onClick={() => {
                   setActiveId(null);
+                  setDeleteError("");
                   setDeleteTarget(activeJob.id);
                 }}
                 style={{ justifyContent: "center", color: "#dc2626", borderColor: "#fecaca" }}

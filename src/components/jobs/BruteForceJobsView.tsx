@@ -6,7 +6,6 @@ import {
   bruteForceRouteJobId,
   createBruteForceJob,
   createBruteForceJobs,
-  deleteBruteForceJob,
   recordBruteForceCallOutcome,
   rescheduleBruteForceInterview,
   setBruteForceDecision,
@@ -20,9 +19,10 @@ import {
 } from "../../lib/firestore";
 import { safeExternalUrl } from "../../lib/security";
 import { WALK_IN_ENABLED } from "../../lib/features";
+import { deleteBruteForceJobWithAnswer, deletionProtectionError } from "../../lib/deletionProtection";
 import { ToastProvider, showToast } from "../ui/Toast";
 import ShimmerSkeleton from "../ui/ShimmerSkeleton";
-import ConfirmModal from "../ui/ConfirmModal";
+import DeletionChallengeModal from "../ui/DeletionChallengeModal";
 
 type DisplayStatus = BruteForceCallOutcome | Exclude<BruteForceDecision, "pending">;
 
@@ -360,6 +360,7 @@ export default function BruteForceJobsView() {
   const [importProgress, setImportProgress] = useState<ImportProgress | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<BruteForceJob | null>(null);
+  const [deleteError, setDeleteError] = useState("");
   const [now, setNow] = useState(Date.now());
 
   const [scheduleId, setScheduleId] = useState<string | null>(null);
@@ -567,18 +568,19 @@ export default function BruteForceJobsView() {
     }
   }
 
-  async function confirmDelete() {
+  async function confirmDelete(answer: string) {
     const target = deleteTarget;
-    if (!target) return;
+    if (!target || !auth.user) return;
 
-    setDeleteTarget(null);
+    setDeleteError("");
     setBusyId(target.id);
     if (scheduleId === target.id) closeSchedule();
     try {
-      await deleteBruteForceJob(target.id);
+      await deleteBruteForceJobWithAnswer(auth.user.uid, target.id, answer);
+      setDeleteTarget(null);
       showToast("Brute Force lead deleted.", "info");
-    } catch (err: any) {
-      showToast(err.message ?? "Lead delete nahi ho payi.", "error");
+    } catch (error) {
+      setDeleteError(deletionProtectionError(error));
     } finally {
       setBusyId(null);
     }
@@ -612,13 +614,14 @@ export default function BruteForceJobsView() {
   return (
     <>
       <ToastProvider />
-      {deleteTarget && (
-        <ConfirmModal
+      {deleteTarget && auth.user && (
+        <DeletionChallengeModal
+          uid={auth.user.uid}
           title="Delete this Brute Force lead?"
-          message={`“${deleteTarget.company}” permanently delete ho jayegi. Is action ko undo nahi kar sakte.`}
-          confirmLabel="Delete"
-          danger
-          onCancel={() => setDeleteTarget(null)}
+          targetLabel={`“${deleteTarget.company}”`}
+          busy={busyId === deleteTarget.id}
+          error={deleteError}
+          onCancel={() => { if (busyId !== deleteTarget.id) { setDeleteTarget(null); setDeleteError(""); } }}
           onConfirm={confirmDelete}
         />
       )}
@@ -871,7 +874,7 @@ export default function BruteForceJobsView() {
                   onOutcome={isActiveLead ? handleOutcome : () => {}}
                   onDecision={isActiveLead ? handleDecision : () => {}}
                   canDelete={auth.user?.uid === lead.ownerUID}
-                  onDelete={setDeleteTarget}
+                  onDelete={leadToDelete => { setDeleteError(""); setDeleteTarget(leadToDelete); }}
                 />
               );
             })}
