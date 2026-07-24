@@ -323,6 +323,7 @@ export default function BruteForceJobsView() {
   const [form, setForm] = useState(INITIAL_FORM);
   const [creating, setCreating] = useState(false);
   const [importing, setImporting] = useState(false);
+  const [importProgress, setImportProgress] = useState<ImportProgress | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [now, setNow] = useState(Date.now());
 
@@ -405,30 +406,61 @@ export default function BruteForceJobsView() {
     const file = input.files?.[0];
     if (!file) return;
 
-    if (!auth.user || !auth.profile) {
-      showToast("Not logged in.", "error");
+    const showImportError = (message: string) => {
+      setImportProgress({ stage: "error", title: "Import failed", message });
+      showToast(message, "error");
       input.value = "";
+    };
+
+    if (!auth.user || !auth.profile) {
+      showImportError("Not logged in.");
       return;
     }
     if (!file.name.toLowerCase().endsWith(".json")) {
-      showToast("Sirf .json file upload karo.", "error");
-      input.value = "";
+      showImportError("Sirf .json file upload karo.");
       return;
     }
     if (file.size > MAX_IMPORT_FILE_BYTES) {
-      showToast("JSON file maximum 1 MB ho sakti hai.", "error");
-      input.value = "";
+      showImportError("JSON file maximum 1 MB ho sakti hai.");
       return;
     }
 
     setImporting(true);
+    setImportProgress({
+      stage: "reading",
+      title: "Reading JSON file",
+      message: `${file.name} read ho rahi hai…`,
+    });
+
     try {
-      const rows = parseImportRows(await file.text());
+      const contents = await file.text();
+      setImportProgress({
+        stage: "validating",
+        title: "Validating job details",
+        message: "Company, role, phone, location aur HTTPS map links check ho rahe hain…",
+      });
+      await waitForNextPaint();
+
+      const rows = parseImportRows(contents);
+      setImportProgress({
+        stage: "uploading",
+        title: "Creating job cards",
+        message: `${rows.length} cards securely create ho rahe hain…`,
+      });
+      await waitForNextPaint();
+
       const importedCount = await createBruteForceJobs(auth.user.uid, auth.profile.username, rows);
       setActiveSection("active");
+      setImportProgress({
+        stage: "complete",
+        title: "Import complete",
+        message: `${importedCount} job cards successfully create ho gaye.`,
+      });
       showToast(`${importedCount} leads import ho gayi.`, "success");
     } catch (err: any) {
-      showToast(err.message ?? "JSON import failed.", "error");
+      const message = err.message ?? "JSON import failed.";
+      setImportProgress({ stage: "error", title: "Import failed", message });
+      showToast(message, "error");
     } finally {
       setImporting(false);
       input.value = "";
@@ -496,6 +528,83 @@ export default function BruteForceJobsView() {
   return (
     <>
       <ToastProvider />
+      {importProgress && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 2000,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: 20,
+            background: "rgba(15, 0, 0, 0.38)",
+            backdropFilter: "blur(3px)",
+          }}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-live="polite"
+            aria-labelledby="import-progress-title"
+            style={{
+              width: "min(430px, 100%)",
+              border: "1px solid var(--hairline-strong)",
+              borderRadius: 12,
+              padding: 24,
+              background: "var(--canvas)",
+              boxShadow: "0 18px 60px rgba(15, 0, 0, 0.2)",
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+              {importProgress.stage === "complete" ? (
+                <span aria-hidden="true" style={{ color: "#15803d", fontSize: 25 }}>✓</span>
+              ) : importProgress.stage === "error" ? (
+                <span aria-hidden="true" style={{ color: "#b91c1c", fontSize: 25 }}>!</span>
+              ) : (
+                <div className="spinner" style={{ width: 20, height: 20, flexShrink: 0 }} />
+              )}
+              <div>
+                <h2 id="import-progress-title" style={{ margin: 0, color: "var(--ink)", fontSize: 17 }}>
+                  {importProgress.title}
+                </h2>
+                <p style={{ margin: "5px 0 0", color: "var(--mute)", fontSize: 12, lineHeight: 1.5 }}>
+                  {importProgress.message}
+                </p>
+              </div>
+            </div>
+
+            <div style={{ height: 6, marginTop: 20, overflow: "hidden", borderRadius: 999, background: "var(--surface-soft)" }}>
+              <div
+                style={{
+                  width: `${IMPORT_PROGRESS_PERCENT[importProgress.stage]}%`,
+                  height: "100%",
+                  borderRadius: 999,
+                  background: importProgress.stage === "error" ? "#dc2626" : importProgress.stage === "complete" ? "#16a34a" : "var(--ink)",
+                  transition: "width 180ms ease",
+                }}
+              />
+            </div>
+
+            {importing && (
+              <p style={{ margin: "12px 0 0", color: "var(--mute)", fontSize: 11 }}>
+                Please iss tab ko open rakho.
+              </p>
+            )}
+
+            {!importing && (importProgress.stage === "complete" || importProgress.stage === "error") && (
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={() => setImportProgress(null)}
+                style={{ marginTop: 20 }}
+              >
+                {importProgress.stage === "complete" ? "View cards" : "Close"}
+              </button>
+            )}
+          </div>
+        </div>
+      )}
       <div className="page-header">
         <h1 className="page-title">Brute Force Jobs</h1>
         <p className="page-subtitle">
@@ -512,6 +621,9 @@ export default function BruteForceJobsView() {
               <span
                 key={statusKey}
                 style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 7,
                   color: item.color,
                   background: item.bg,
                   border: `1px solid ${item.border}`,
@@ -521,6 +633,10 @@ export default function BruteForceJobsView() {
                   fontWeight: 700,
                 }}
               >
+                <span
+                  aria-hidden="true"
+                  style={{ width: 7, height: 7, borderRadius: "50%", background: item.color, flexShrink: 0 }}
+                />
                 {item.label}
               </span>
             );
@@ -540,7 +656,7 @@ export default function BruteForceJobsView() {
           className="btn btn-secondary"
           style={{ opacity: importing ? 0.6 : 1, cursor: importing ? "wait" : "pointer" }}
         >
-          {importing ? "Importing…" : "Choose JSON file"}
+          {importing ? "Importing…" : "Upload JSON file"}
           <input
             type="file"
             accept=".json,application/json"
