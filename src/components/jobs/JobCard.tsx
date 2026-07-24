@@ -7,6 +7,7 @@ import { showToast } from "../ui/Toast";
 import { serverTimestamp } from "firebase/firestore";
 import ReasonModal from "../ui/ReasonModal";
 import { safeExternalUrl } from "../../lib/security";
+import { WALK_IN_ENABLED } from "../../lib/features";
 
 interface Props {
   job: JobCardType;
@@ -313,7 +314,7 @@ export default function JobCard({ job, showCopy = true, isOwner = false, onDelet
             why: {job.cancelReason || "—"}
           </span>
         )}
-        {onRoute && (
+        {WALK_IN_ENABLED && onRoute && (
           <span style={{ background: "#fff7ed", border: "1px solid #fdba74", color: "#c2410c", fontSize: 11, padding: "3px 8px", borderRadius: 3 }}>
             on route
           </span>
@@ -428,7 +429,7 @@ export default function JobCard({ job, showCopy = true, isOwner = false, onDelet
           )}
         </div>
         <div style={{ display: "flex", gap: 8 }}>
-          {isOwner && (
+          {WALK_IN_ENABLED && isOwner && (
             <button
               onClick={toggleRoute}
               style={{

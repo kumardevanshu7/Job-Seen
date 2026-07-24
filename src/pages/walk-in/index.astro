@@ -1,7 +1,16 @@
 ---
 import AppLayout from "../../layouts/AppLayout.astro";
 import WalkInRouteView from "../../components/jobs/WalkInRouteView";
+import { WALK_IN_ENABLED } from "../../lib/features";
 ---
 <AppLayout title="Walk-in Route">
-  <WalkInRouteView client:only="react" />
+  {WALK_IN_ENABLED ? (
+    <WalkInRouteView client:only="react" />
+  ) : (
+    <div class="empty-state">
+      <div class="empty-state-title">Walk-in feature is currently disabled</div>
+      <p>Is workflow ko zaroorat padne par dobara enable kiya ja sakta hai.</p>
+      <a href="/" class="btn btn-secondary" style="text-decoration:none">Go to Inbox</a>
+    </div>
+  )}
 </AppLayout>

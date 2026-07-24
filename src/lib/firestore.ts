@@ -19,6 +19,7 @@ import {
 } from "firebase/firestore";
 import { db } from "./firebase";
 import { canonicalPairId, requireSafeExternalUrl } from "./security";
+import { WALK_IN_ENABLED } from "./features";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -103,6 +104,7 @@ export type BruteForceCallOutcome =
   | "not_called"
   | "no_response"
   | "wrong_number"
+  | "incoming_not_allowed"
   | "no_vacancies"
   | "success";
 
@@ -170,8 +172,32 @@ export async function createJob(
   ownerUsername: string,
   data: Omit<JobCard, "id" | "ownerUID" | "ownerUsername" | "createdAt">
 ): Promise<string> {
+  if (!WALK_IN_ENABLED && (data.jobType === "walkin" || data.onRoute === true)) {
+    throw new Error("Walk-in feature is currently disabled.");
+  }
   const ref = await addDoc(collection(db, "jobs"), buildJobPayload(ownerUID, ownerUsername, data));
   return ref.id;
+}
+
+export async function createJobs(
+  ownerUID: string,
+  ownerUsername: string,
+  rows: Omit<JobCard, "id" | "ownerUID" | "ownerUsername" | "createdAt">[]
+): Promise<number> {
+  if (rows.length === 0 || rows.length > 100) {
+    throw new Error("JSON import must contain between 1 and 100 jobs.");
+  }
+  if (!WALK_IN_ENABLED && rows.some(row => row.jobType === "walkin" || row.onRoute === true)) {
+    throw new Error("Walk-in feature is currently disabled.");
+  }
+
+  const batch = writeBatch(db);
+  rows.forEach(row => {
+    const ref = doc(collection(db, "jobs"));
+    batch.set(ref, buildJobPayload(ownerUID, ownerUsername, row));
+  });
+  await batch.commit();
+  return rows.length;
 }
 
 export function subscribeToUserJobs(
@@ -216,6 +242,9 @@ export async function copyJob(
   targetUID: string,
   targetUsername: string
 ): Promise<string> {
+  if (!WALK_IN_ENABLED && (sourceJob.jobType === "walkin" || sourceJob.onRoute === true)) {
+    throw new Error("Walk-in feature is currently disabled.");
+  }
   const copyRef = doc(db, "jobs", `copy_${targetUID}_${sourceJob.id}`);
   const { id, ownerUID, ownerUsername, createdAt, status, appliedAt, reminderDismissedAt, ...rest } = sourceJob;
   const payload = buildJobPayload(targetUID, targetUsername, {
@@ -239,6 +268,10 @@ export async function getJobById(jobId: string): Promise<JobCard | null> {
 
 export async function deleteJob(jobId: string): Promise<void> {
   await deleteDoc(doc(db, "jobs", jobId));
+}
+
+export async function deleteBruteForceJob(jobId: string): Promise<void> {
+  await deleteDoc(doc(db, "bruteForceJobs", jobId));
 }
 
 // ─── Brute Force Job Leads ────────────────────────────────────────────────────
@@ -315,6 +348,7 @@ export async function addBruteForceJobToRoute(
   ownerUsername: string,
   routeJobExists: boolean
 ): Promise<string> {
+  if (!WALK_IN_ENABLED) throw new Error("Walk-in feature is currently disabled.");
   if (lead.ownerUID !== ownerUID) throw new Error("Only the lead owner can add it to a route.");
 
   const routeRef = doc(db, "jobs", bruteForceRouteJobId(ownerUID, lead.id));
@@ -461,6 +495,7 @@ export async function updateJobStatus(
 export async function updateJobRouteOrder(
   updates: { id: string; routeOrder: number }[]
 ): Promise<void> {
+  if (!WALK_IN_ENABLED) throw new Error("Walk-in feature is currently disabled.");
   for (let index = 0; index < updates.length; index += 450) {
     const batch = writeBatch(db);
     updates.slice(index, index + 450).forEach(({ id, routeOrder }) => {
@@ -475,6 +510,7 @@ export async function setJobOnRoute(
   onRoute: boolean,
   routeOrder?: number
 ): Promise<void> {
+  if (!WALK_IN_ENABLED) throw new Error("Walk-in feature is currently disabled.");
   const updates: any = { onRoute };
   if (onRoute) updates.routeOrder = routeOrder ?? Date.now();
   await updateDoc(doc(db, "jobs", jobId), updates);

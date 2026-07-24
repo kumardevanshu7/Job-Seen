@@ -6,6 +6,7 @@ import {
   bruteForceRouteJobId,
   createBruteForceJob,
   createBruteForceJobs,
+  deleteBruteForceJob,
   recordBruteForceCallOutcome,
   rescheduleBruteForceInterview,
   setBruteForceDecision,
@@ -18,8 +19,10 @@ import {
   type InterviewMode,
 } from "../../lib/firestore";
 import { safeExternalUrl } from "../../lib/security";
+import { WALK_IN_ENABLED } from "../../lib/features";
 import { ToastProvider, showToast } from "../ui/Toast";
 import ShimmerSkeleton from "../ui/ShimmerSkeleton";
+import ConfirmModal from "../ui/ConfirmModal";
 
 type DisplayStatus = BruteForceCallOutcome | Exclude<BruteForceDecision, "pending">;
 
@@ -34,6 +37,7 @@ const STATUS_STYLES: Record<DisplayStatus, StatusMeta> = {
   not_called: { label: "Not called", color: "#57534e", bg: "#f5f5f4", border: "#d6d3d1" },
   no_response: { label: "No response", color: "#6d28d9", bg: "#f5f3ff", border: "#ddd6fe" },
   wrong_number: { label: "Wrong number", color: "#be123c", bg: "#fff1f2", border: "#fecdd3" },
+  incoming_not_allowed: { label: "Incoming not allowed", color: "#0369a1", bg: "#f0f9ff", border: "#bae6fd" },
   no_vacancies: { label: "No vacancies", color: "#b45309", bg: "#fffbeb", border: "#fde68a" },
   success: { label: "Success — interview scheduled", color: "#15803d", bg: "#f0fdf4", border: "#bbf7d0" },
   selected: { label: "Selected", color: "#1d4ed8", bg: "#eff6ff", border: "#bfdbfe" },
@@ -41,11 +45,11 @@ const STATUS_STYLES: Record<DisplayStatus, StatusMeta> = {
 };
 
 const OUTCOME_VALUES: BruteForceCallOutcome[] = [
-  "not_called", "no_response", "wrong_number", "no_vacancies", "success",
+  "not_called", "no_response", "wrong_number", "incoming_not_allowed", "no_vacancies", "success",
 ];
 const OUTCOMES = OUTCOME_VALUES.map(value => ({ value, ...STATUS_STYLES[value] }));
 const STATUS_LEGEND: DisplayStatus[] = [
-  "not_called", "no_response", "wrong_number", "no_vacancies", "success", "selected", "rejected",
+  "not_called", "no_response", "wrong_number", "incoming_not_allowed", "no_vacancies", "success", "selected", "rejected",
 ];
 
 const INITIAL_FORM = { company: "", phone: "", location: "", mapLink: "", role: "" };
@@ -164,6 +168,8 @@ interface LeadCardProps {
   onSaveSchedule: (lead: BruteForceJob) => void;
   onOutcome: (lead: BruteForceJob, outcome: BruteForceCallOutcome) => void;
   onDecision: (lead: BruteForceJob, decision: Exclude<BruteForceDecision, "pending">) => void;
+  canDelete: boolean;
+  onDelete: (lead: BruteForceJob) => void;
 }
 
 function LeadCard(props: LeadCardProps) {
@@ -194,15 +200,27 @@ function LeadCard(props: LeadCardProps) {
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 14 }}>
         {phoneHref ? <a className="btn btn-secondary btn-sm" href={phoneHref}>Call {lead.phone}</a> : <span className="form-hint">Phone not available</span>}
         {safeMapLink && <a className="btn btn-secondary btn-sm" href={safeMapLink} target="_blank" rel="noopener noreferrer">Open map ↗</a>}
-        <button
-          type="button"
-          className="btn btn-secondary btn-sm"
-          disabled={busy || props.onRoute}
-          onClick={() => props.onAddToRoute(lead)}
-          style={props.onRoute ? { color: "#15803d", borderColor: "#bbf7d0", background: "#f0fdf4" } : undefined}
-        >
-          {props.onRoute ? "On Walk-in Route ✓" : "+ Add to Walk-in Route"}
-        </button>
+        {WALK_IN_ENABLED && (
+          <button
+            type="button"
+            className="btn btn-secondary btn-sm"
+            disabled={busy || props.onRoute}
+            onClick={() => props.onAddToRoute(lead)}
+            style={props.onRoute ? { color: "#15803d", borderColor: "#bbf7d0", background: "#f0fdf4" } : undefined}
+          >
+            {props.onRoute ? "On Walk-in Route ✓" : "+ Add to Walk-in Route"}
+          </button>
+        )}
+        {props.canDelete && (
+          <button
+            type="button"
+            className="btn btn-danger btn-sm"
+            disabled={busy}
+            onClick={() => props.onDelete(lead)}
+          >
+            Delete
+          </button>
+        )}
       </div>
 
       {!isFinal && lead.callOutcome !== "success" && (
@@ -341,6 +359,7 @@ export default function BruteForceJobsView() {
   const [importing, setImporting] = useState(false);
   const [importProgress, setImportProgress] = useState<ImportProgress | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<BruteForceJob | null>(null);
   const [now, setNow] = useState(Date.now());
 
   const [scheduleId, setScheduleId] = useState<string | null>(null);
@@ -354,10 +373,12 @@ export default function BruteForceJobsView() {
       setLeads(data);
       setLoading(false);
     });
-    const unsubscribeRouteJobs = subscribeToUserJobs(auth.user.uid, jobs => {
-      setExistingJobIds(new Set(jobs.map(job => job.id)));
-      setRouteJobIds(new Set(jobs.filter(job => job.onRoute === true).map(job => job.id)));
-    });
+    const unsubscribeRouteJobs = WALK_IN_ENABLED
+      ? subscribeToUserJobs(auth.user.uid, jobs => {
+          setExistingJobIds(new Set(jobs.map(job => job.id)));
+          setRouteJobIds(new Set(jobs.filter(job => job.onRoute === true).map(job => job.id)));
+        })
+      : () => {};
     return () => {
       unsubscribeLeads();
       unsubscribeRouteJobs();
@@ -546,6 +567,23 @@ export default function BruteForceJobsView() {
     }
   }
 
+  async function confirmDelete() {
+    const target = deleteTarget;
+    if (!target) return;
+
+    setDeleteTarget(null);
+    setBusyId(target.id);
+    if (scheduleId === target.id) closeSchedule();
+    try {
+      await deleteBruteForceJob(target.id);
+      showToast("Brute Force lead deleted.", "info");
+    } catch (err: any) {
+      showToast(err.message ?? "Lead delete nahi ho payi.", "error");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
   async function handleAddToRoute(lead: BruteForceJob) {
     if (!auth.user || !auth.profile) {
       showToast("Not logged in.", "error");
@@ -574,6 +612,16 @@ export default function BruteForceJobsView() {
   return (
     <>
       <ToastProvider />
+      {deleteTarget && (
+        <ConfirmModal
+          title="Delete this Brute Force lead?"
+          message={`“${deleteTarget.company}” permanently delete ho jayegi. Is action ko undo nahi kar sakte.`}
+          confirmLabel="Delete"
+          danger
+          onCancel={() => setDeleteTarget(null)}
+          onConfirm={confirmDelete}
+        />
+      )}
       {importProgress && (
         <div
           style={{
@@ -654,7 +702,7 @@ export default function BruteForceJobsView() {
       <div className="page-header">
         <h1 className="page-title">Brute Force Jobs</h1>
         <p className="page-subtitle">
-          AI se company list nikalo, phone number pe call milao, aur yahan track karo — no response, wrong number, no vacancies, ya interview mil gaya.
+          AI se company list nikalo, phone number pe call milao, aur yahan track karo — no response, wrong number, incoming not allowed, no vacancies, ya interview mil gaya.
         </p>
       </div>
 
@@ -822,6 +870,8 @@ export default function BruteForceJobsView() {
                   onSaveSchedule={isActiveLead ? handleSaveSchedule : () => {}}
                   onOutcome={isActiveLead ? handleOutcome : () => {}}
                   onDecision={isActiveLead ? handleDecision : () => {}}
+                  canDelete={auth.user?.uid === lead.ownerUID}
+                  onDelete={setDeleteTarget}
                 />
               );
             })}

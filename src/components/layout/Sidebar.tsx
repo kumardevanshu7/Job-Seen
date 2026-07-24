@@ -4,6 +4,7 @@ import { $auth } from "../../stores/authStore";
 import { $notifications } from "../../stores/notificationStore";
 import { $unreadChatCount } from "../../stores/chatStore";
 import { signOut } from "../../lib/auth";
+import { WALK_IN_ENABLED } from "../../lib/features";
 
 // Icon glyphs (monospace ASCII, not SVG)
 const icons: Record<string, string> = {
@@ -21,7 +22,7 @@ const icons: Record<string, string> = {
 const primaryNav = [
   { href: "/",                     label: "Inbox",         icon: "⊙" },
   { href: "/add-job",              label: "Add Job",       icon: "+" },
-  { href: "/walk-in",              label: "Walk-in Route", icon: "⌁" },
+  ...(WALK_IN_ENABLED ? [{ href: "/walk-in", label: "Walk-in Route", icon: "⌁" }] : []),
   { href: "/brute-force",          label: "Brute Force Jobs", icon: "☎" },
 ];
 
@@ -195,10 +196,12 @@ export default function Sidebar() {
           <span className="mobile-nav-item-icon">+</span>
           <span>Add Job</span>
         </a>
-        <a href="/walk-in" className={`mobile-nav-item ${path === "/walk-in" || path.startsWith("/walk-in/") ? "active" : ""}`} onClick={() => setPath("/walk-in")}>
-          <span className="mobile-nav-item-icon">⌁</span>
-          <span>Route</span>
-        </a>
+        {WALK_IN_ENABLED && (
+          <a href="/walk-in" className={`mobile-nav-item ${path === "/walk-in" || path.startsWith("/walk-in/") ? "active" : ""}`} onClick={() => setPath("/walk-in")}>
+            <span className="mobile-nav-item-icon">⌁</span>
+            <span>Route</span>
+          </a>
+        )}
         <a href="/chat" className={`mobile-nav-item ${path === "/chat" ? "active" : ""}`} onClick={() => setPath("/chat")}>
           <span className="mobile-nav-item-icon">◫</span>
           <span>Messages</span>
