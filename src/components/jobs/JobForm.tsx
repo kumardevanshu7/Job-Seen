@@ -1,7 +1,7 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useStore } from "@nanostores/react";
 import { $auth } from "../../stores/authStore";
-import { createJob, createJobs, type EmploymentType, type JobType } from "../../lib/firestore";
+import { createJob, createJobs, subscribeToUserJobs, type EmploymentType, type JobType, type JobCard } from "../../lib/firestore";
 import { showToast, ToastProvider } from "../ui/Toast";
 import { safeExternalUrl } from "../../lib/security";
 import { WALK_IN_ADD_JOB_ENABLED } from "../../lib/features";
@@ -79,6 +79,24 @@ export default function JobForm() {
   const [done, setDone] = useState(false);
   const [importing, setImporting] = useState(false);
   const [importProgress, setImportProgress] = useState<ImportProgress | null>(null);
+  const [pastJobs, setPastJobs] = useState<JobCard[]>([]);
+
+  useEffect(() => {
+    if (!auth.user) return;
+    const unsub = subscribeToUserJobs(auth.user.uid, setPastJobs);
+    return () => unsub();
+  }, [auth.user]);
+
+  const suggest = useMemo(() => {
+    const uniq = (vals: (string | undefined)[]) =>
+      Array.from(new Set(vals.map(v => (v ?? "").trim()).filter(Boolean))).slice(0, 50);
+    return {
+      company: uniq(pastJobs.map(j => j.company)),
+      role: uniq(pastJobs.map(j => j.role)),
+      location: uniq(pastJobs.map(j => j.location)),
+      ctc: uniq(pastJobs.map(j => j.ctc)),
+    };
+  }, [pastJobs]);
 
   const setO = (f: keyof OnlineForm, v: string) => setOnline(p => ({ ...p, [f]: v }));
   const setW = (f: keyof WalkinForm, v: string) => setWalkin(p => ({ ...p, [f]: v }));
@@ -300,6 +318,10 @@ export default function JobForm() {
   return (
     <>
       <ToastProvider />
+      <datalist id="suggest-company">{suggest.company.map(v => <option key={v} value={v} />)}</datalist>
+      <datalist id="suggest-role">{suggest.role.map(v => <option key={v} value={v} />)}</datalist>
+      <datalist id="suggest-location">{suggest.location.map(v => <option key={v} value={v} />)}</datalist>
+      <datalist id="suggest-ctc">{suggest.ctc.map(v => <option key={v} value={v} />)}</datalist>
 
       {importProgress && (
         <div style={{ position: "fixed", inset: 0, zIndex: 2000, display: "flex", alignItems: "center", justifyContent: "center", padding: 20, background: "rgba(15,0,0,0.38)", backdropFilter: "blur(3px)" }}>
@@ -415,7 +437,7 @@ export default function JobForm() {
           <form onSubmit={submitOnline} style={{ display: "flex", flexDirection: "column", gap: 18 }}>
             <div className="form-group">
               <label className="form-label">role *</label>
-              <input className="form-input" placeholder="Frontend Developer, SDE Intern…" value={online.role} onChange={e => setO("role", e.target.value)} style={inputStyle} required />
+              <input className="form-input" list="suggest-role" placeholder="Frontend Developer, SDE Intern…" value={online.role} onChange={e => setO("role", e.target.value)} style={inputStyle} required />
             </div>
 
             <EmploymentFields
@@ -428,11 +450,11 @@ export default function JobForm() {
             <div className="two-col">
               <div className="form-group">
                 <label className="form-label">company</label>
-                <input className="form-input" placeholder="Infosys, Wipro…" value={online.company} onChange={e => setO("company", e.target.value)} style={inputStyle} />
+                <input className="form-input" list="suggest-company" placeholder="Infosys, Wipro…" value={online.company} onChange={e => setO("company", e.target.value)} style={inputStyle} />
               </div>
               <div className="form-group">
                 <label className="form-label">location</label>
-                <input className="form-input" placeholder="Remote / Bangalore" value={online.location} onChange={e => setO("location", e.target.value)} style={inputStyle} />
+                <input className="form-input" list="suggest-location" placeholder="Remote / Bangalore" value={online.location} onChange={e => setO("location", e.target.value)} style={inputStyle} />
               </div>
             </div>
 
@@ -454,6 +476,7 @@ export default function JobForm() {
                 </label>
                 <input
                   className="form-input"
+                  list="suggest-ctc"
                   placeholder={online.employmentType === "internship" ? "₹15–20k /month" : "6 LPA, ₹8–10 LPA"}
                   value={online.ctc}
                   onChange={e => setO("ctc", e.target.value)}

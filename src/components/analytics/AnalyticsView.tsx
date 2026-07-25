@@ -145,8 +145,16 @@ export default function AnalyticsView() {
     }
   }, [statusChips, selectedStatus]);
 
+  const [search, setSearch] = useState("");
+  const q = search.trim().toLowerCase();
+
   const visibleGroups = (selectedDay === "all" ? grouped : grouped.filter(g => g.key === selectedDay))
-    .map(g => ({ ...g, items: selectedStatus === "all" ? g.items : g.items.filter(r => r.status === selectedStatus) }))
+    .map(g => ({
+      ...g,
+      items: g.items
+        .filter(r => selectedStatus === "all" || r.status === selectedStatus)
+        .filter(r => !q || [r.company, r.role, r.status, r.kind].some(v => (v ?? "").toLowerCase().includes(q))),
+    }))
     .filter(g => g.items.length > 0);
 
   function chipLabel(key: string): string {
@@ -179,6 +187,18 @@ export default function AnalyticsView() {
         </div>
       ) : (
         <>
+        <div style={{ position: "relative", marginBottom: 16 }}>
+          <input
+            type="search"
+            className="form-input"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Search company, role, ya status…"
+            style={{ paddingLeft: 34, fontFamily: "inherit" }}
+          />
+          <span aria-hidden="true" style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "var(--mute)", fontSize: 14 }}>⚲</span>
+        </div>
+
         <div className="date-slider" role="tablist" aria-label="Filter by date">
           <button
             type="button"

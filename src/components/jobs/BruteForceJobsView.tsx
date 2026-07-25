@@ -465,6 +465,7 @@ export default function BruteForceJobsView() {
   const [bulkDeleting, setBulkDeleting] = useState(false);
   const [bulkDeleteError, setBulkDeleteError] = useState("");
   const [selectedRouteDate, setSelectedRouteDate] = useState<string>(() => dateKeyFromDate(new Date()));
+  const [leadSearch, setLeadSearch] = useState("");
   const [now, setNow] = useState(Date.now());
 
   const [scheduleId, setScheduleId] = useState<string | null>(null);
@@ -527,8 +528,16 @@ export default function BruteForceJobsView() {
       emptyText: "Rejected companies yahan dikhengi.",
     },
   ];
-  const visibleSection = sections.find(section => section.id === activeSection) ?? sections[0];
-  const visibleLeadIds = visibleSection.items.map(lead => lead.id);
+  const rawVisibleSection = sections.find(section => section.id === activeSection) ?? sections[0];
+  const searchQuery = leadSearch.trim().toLowerCase();
+  const shownItems = searchQuery
+    ? rawVisibleSection.items.filter(lead =>
+        [lead.company, lead.role, lead.location, lead.phone]
+          .some(v => (v ?? "").toLowerCase().includes(searchQuery))
+      )
+    : rawVisibleSection.items;
+  const visibleSection = { ...rawVisibleSection, items: shownItems };
+  const visibleLeadIds = shownItems.map(lead => lead.id);
   const allVisibleSelected = visibleLeadIds.length > 0 && visibleLeadIds.every(id => selectedLeadIds.has(id));
 
   function toggleLeadSelection(leadId: string) {
@@ -1115,6 +1124,18 @@ export default function BruteForceJobsView() {
           </div>
         </div>
       )}
+
+      <div style={{ position: "relative", marginBottom: 14 }}>
+        <input
+          type="search"
+          className="form-input"
+          value={leadSearch}
+          onChange={e => setLeadSearch(e.target.value)}
+          placeholder="Search company, role, location, ya phone…"
+          style={{ paddingLeft: 34, fontFamily: "inherit" }}
+        />
+        <span aria-hidden="true" style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "var(--mute)", fontSize: 14 }}>⚲</span>
+      </div>
 
       <div
         role="tablist"
