@@ -1048,9 +1048,12 @@ export default function BruteForceJobsView() {
       </form>
 
       {WALK_IN_ENABLED && (
-        <div style={{ marginBottom: 18 }}>
-          <div style={{ fontSize: 10, fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--mute)", marginBottom: 8 }}>
-            Walk-in Route date — “+ Add to Walk-in Route” isi din ke route mein daalega
+        <div className="form-card" style={{ marginBottom: 22, background: "var(--surface-soft)" }}>
+          <div style={{ fontSize: 13, fontWeight: 800, color: "var(--ink)", marginBottom: 3 }}>
+            🗺️ Walk-in Route planner
+          </div>
+          <div style={{ fontSize: 11, color: "var(--mute)", marginBottom: 12, lineHeight: 1.5 }}>
+            Yeh sirf route planning ke liye hai. Neeche di gayi <b>active leads list date se change nahi hoti</b> — woh aapki poori call-list hai. Date choose karke “+ Add to Walk-in Route” us din ke route mein card daalega.
           </div>
           <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 4 }}>
             {nextRouteDates(10).map(dk => {
@@ -1096,7 +1099,7 @@ export default function BruteForceJobsView() {
               );
             })}
           </div>
-          <div style={{ fontSize: 10, color: "var(--mute)", marginTop: 6 }}>
+          <div style={{ fontSize: 10, color: "var(--mute)", marginTop: 8 }}>
             Circle = us din sab active leads ka status change hua ya nahi (green ✓ = sab pe call karke status liya).
           </div>
         </div>
