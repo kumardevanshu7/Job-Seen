@@ -339,13 +339,15 @@ export default function AnalyticsView() {
         .an-badge { display: inline-block; padding: 3px 9px; border-radius: 999px; border: 1px solid; font-size: 11px; font-weight: 700; }
         @media (max-width: 640px) {
           .analytics-head { display: none; }
-          .analytics-row { grid-template-columns: 1fr; gap: 7px; padding: 12px 14px; }
-          .analytics-row span[data-label] { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; }
+          .analytics-row { grid-template-columns: 1fr; gap: 10px; padding: 14px; }
+          .analytics-row span[data-label] { display: block; }
           .analytics-row span[data-label]::before {
-            content: attr(data-label); font-size: 10px; font-weight: 800; text-transform: uppercase;
-            letter-spacing: .05em; color: var(--mute); flex: 0 0 auto;
+            content: attr(data-label); display: block; font-size: 9px; font-weight: 800; text-transform: uppercase;
+            letter-spacing: .05em; color: var(--mute); margin-bottom: 3px;
           }
-          .an-company, .an-role { text-align: right; }
+          .an-time, .an-kind { font-size: 13px; color: var(--ink); }
+          .an-company, .an-role { text-align: left; }
+          .an-company { font-size: 14px; }
         }
       `}</style>
     </>

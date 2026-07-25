@@ -44,7 +44,15 @@ export default function Sidebar() {
   const [path, setPath] = useState(
     typeof window !== "undefined" ? window.location.pathname : ""
   );
+  const [menuOpen, setMenuOpen] = useState(false);
   const admin = auth.isAdmin;
+
+  // Lock body scroll when the mobile drawer is open.
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    document.body.style.overflow = menuOpen ? "hidden" : "";
+    return () => { document.body.style.overflow = ""; };
+  }, [menuOpen]);
 
   useEffect(() => {
     const sync = () => setPath(window.location.pathname);
@@ -160,78 +168,128 @@ export default function Sidebar() {
 
       {/* ── Mobile Top Header ── */}
       <header className="mobile-header">
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <button
+            type="button"
+            aria-label={menuOpen ? "Close menu" : "Open menu"}
+            aria-expanded={menuOpen}
+            onClick={() => setMenuOpen(v => !v)}
+            className={`hamburger ${menuOpen ? "open" : ""}`}
+          >
+            <span /><span /><span />
+          </button>
           <span style={{ fontSize: 14, fontWeight: 700, letterSpacing: "0.08em", color: "var(--ink)" }}>
             JOBSEEN
           </span>
-          {auth.profile && (
-            <span style={{ fontSize: 11, color: "var(--mute)" }}>
-              @{auth.profile.username}
-            </span>
-          )}
         </div>
-        <button
-          onClick={handleSignOut}
-          style={{
-            fontSize: 11,
-            color: "var(--ink)",
-            background: "none",
-            border: "1px solid var(--hairline)",
-            padding: "5px 10px",
-            borderRadius: 3,
-            cursor: "pointer",
-            fontFamily: "inherit",
-          }}
-        >
-          ← sign out
-        </button>
+        {auth.profile && (
+          <span style={{ fontSize: 11, color: "var(--mute)" }}>@{auth.profile.username}</span>
+        )}
       </header>
 
-      {/* ── Mobile Fixed Bottom Navigation Bar ── */}
-      <nav className="mobile-bottom-nav">
-        <a href="/" className={`mobile-nav-item ${path === "/" ? "active" : ""}`} onClick={() => setPath("/")}>
-          <span className="mobile-nav-item-icon">⊙</span>
-          <span>Inbox</span>
-        </a>
-        <a href="/add-job" className={`mobile-nav-item ${path === "/add-job" ? "active" : ""}`} onClick={() => setPath("/add-job")}>
-          <span className="mobile-nav-item-icon">+</span>
-          <span>Add Job</span>
-        </a>
-        {WALK_IN_ENABLED && (
-          <a href="/walk-in" className={`mobile-nav-item ${path === "/walk-in" || path.startsWith("/walk-in/") ? "active" : ""}`} onClick={() => setPath("/walk-in")}>
-            <span className="mobile-nav-item-icon">⌁</span>
-            <span>Route</span>
-          </a>
+      {/* ── Mobile Slide-in Drawer ── */}
+      <div
+        className={`mobile-drawer-backdrop ${menuOpen ? "show" : ""}`}
+        onClick={() => setMenuOpen(false)}
+        aria-hidden={!menuOpen}
+      />
+      <nav className={`mobile-drawer ${menuOpen ? "open" : ""}`} aria-label="Mobile navigation">
+        <div className="mobile-drawer-user">
+          <div style={{ fontSize: 15, fontWeight: 700, color: "var(--ink)" }}>{auth.profile?.displayName ?? "…"}</div>
+          {auth.profile && <div style={{ fontSize: 12, color: "var(--mute)" }}>@{auth.profile.username}</div>}
+        </div>
+
+        <div className="mobile-drawer-section">Menu</div>
+        {primaryNav.map(item => (
+          <DrawerLink key={item.href} {...item} />
+        ))}
+
+        <div className="mobile-drawer-section">Navigation</div>
+        {secondaryNav.map(item => (
+          <DrawerLink
+            key={item.href}
+            {...item}
+            count={item.hasChatCount ? unreadChat : (item.hasCount ? unread : undefined)}
+          />
+        ))}
+
+        {admin && (
+          <>
+            <div className="mobile-drawer-section">Admin</div>
+            <DrawerLink href="/admin" label="Admin Panel" icon="◈" />
+          </>
         )}
-        <a href="/chat" className={`mobile-nav-item ${path === "/chat" ? "active" : ""}`} onClick={() => setPath("/chat")}>
-          <span className="mobile-nav-item-icon">◫</span>
-          <span>Messages</span>
-          {unreadChat > 0 && <span className="mobile-nav-badge">{unreadChat}</span>}
-        </a>
-        <a href="/analytics" className={`mobile-nav-item ${path === "/analytics" ? "active" : ""}`} onClick={() => setPath("/analytics")}>
-          <span className="mobile-nav-item-icon">▤</span>
-          <span>Stats</span>
-        </a>
-        <a href="/users" className={`mobile-nav-item ${path === "/users" ? "active" : ""}`} onClick={() => setPath("/users")}>
-          <span className="mobile-nav-item-icon">⊕</span>
-          <span>Users</span>
-        </a>
-        <a href="/notifications" className={`mobile-nav-item ${path === "/notifications" ? "active" : ""}`} onClick={() => setPath("/notifications")}>
-          <span className="mobile-nav-item-icon">○</span>
-          <span>Notifs</span>
-          {unread > 0 && <span className="mobile-nav-badge">{unread}</span>}
-        </a>
-        <a href="/explore" className={`mobile-nav-item ${path === "/explore" ? "active" : ""}`} onClick={() => setPath("/explore")}>
-          <span className="mobile-nav-item-icon" style={{ display: "inline-flex", alignItems: "center" }}>
-            <img src="/arigato-single-logo.png" alt="Explore" style={{ width: 14, height: 14, objectFit: "contain" }} />
-          </span>
-          <span>Explore</span>
-        </a>
-        <a href="/settings" className={`mobile-nav-item ${path.startsWith("/settings") ? "active" : ""}`} onClick={() => setPath("/settings")}>
-          <span className="mobile-nav-item-icon">◎</span>
-          <span>Settings</span>
-        </a>
+
+        <button className="mobile-drawer-signout" onClick={handleSignOut}>← Sign Out</button>
       </nav>
+
+      <style>{`
+        .hamburger {
+          width: 34px; height: 34px; border: 1px solid var(--hairline); border-radius: 8px;
+          background: var(--canvas); cursor: pointer; padding: 0;
+          display: inline-flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
+        }
+        .hamburger span {
+          display: block; width: 16px; height: 2px; border-radius: 2px; background: var(--ink);
+          transition: transform 0.25s ease, opacity 0.2s ease;
+        }
+        .hamburger.open span:nth-child(1) { transform: translateY(6px) rotate(45deg); }
+        .hamburger.open span:nth-child(2) { opacity: 0; }
+        .hamburger.open span:nth-child(3) { transform: translateY(-6px) rotate(-45deg); }
+        .mobile-drawer-backdrop {
+          position: fixed; inset: 0; background: rgba(0,0,0,0.4); backdrop-filter: blur(2px);
+          opacity: 0; pointer-events: none; transition: opacity 0.25s ease; z-index: 900;
+        }
+        .mobile-drawer-backdrop.show { opacity: 1; pointer-events: auto; }
+        .mobile-drawer {
+          position: fixed; top: 0; left: 0; bottom: 0; width: min(80vw, 300px);
+          background: var(--canvas); border-right: 1px solid var(--hairline);
+          transform: translateX(-100%); transition: transform 0.28s cubic-bezier(0.4,0,0.2,1);
+          z-index: 901; overflow-y: auto; padding: 16px 12px 24px;
+          box-shadow: 0 20px 60px rgba(0,0,0,0.18); display: none;
+        }
+        .mobile-drawer.open { transform: translateX(0); }
+        .mobile-drawer-user { padding: 8px 12px 14px; border-bottom: 1px solid var(--hairline); margin-bottom: 8px; }
+        .mobile-drawer-section {
+          font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em;
+          color: var(--mute); padding: 12px 12px 6px;
+        }
+        .mobile-drawer a {
+          display: flex; align-items: center; gap: 12px; padding: 11px 12px; border-radius: 8px;
+          text-decoration: none; color: var(--body); font-size: 14px; font-weight: 600;
+        }
+        .mobile-drawer a.active { background: var(--surface-soft); color: var(--ink); }
+        .mobile-drawer a .di { width: 18px; text-align: center; }
+        .mobile-drawer a .dcount {
+          margin-left: auto; background: var(--ink); color: var(--canvas);
+          font-size: 10px; font-weight: 700; border-radius: 999px; padding: 1px 7px;
+        }
+        .mobile-drawer-signout {
+          margin: 16px 12px 0; padding: 11px 12px; width: calc(100% - 24px);
+          text-align: left; background: none; border: 1px solid var(--hairline); border-radius: 8px;
+          color: var(--mute); font-size: 14px; font-weight: 600; cursor: pointer; fontFamily: inherit;
+        }
+        @media (max-width: 768px) { .mobile-drawer { display: block; } }
+      `}</style>
     </>
   );
+
+  function DrawerLink({ href, label, icon, count }: { href: string; label: string; icon: string; count?: number }) {
+    const active = href === "/" ? path === "/" : path === href || path.startsWith(href + "/");
+    return (
+      <a
+        href={href}
+        className={active ? "active" : ""}
+        onClick={() => { setPath(href); setMenuOpen(false); }}
+      >
+        {icon === "image" ? (
+          <span className="di"><img src="/arigato-single-logo.png" alt="" style={{ width: 16, height: 16, objectFit: "contain" }} /></span>
+        ) : (
+          <span className="di">{icon}</span>
+        )}
+        <span>{label}</span>
+        {count != null && count > 0 && <span className="dcount">{count}</span>}
+      </a>
+    );
+  }
 }
