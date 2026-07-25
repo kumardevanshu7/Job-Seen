@@ -21,6 +21,13 @@ type Row = {
   millis: number;
 };
 
+const RANK: Record<string, number> = {
+  "Selected": 0, "Resume sent (hold)": 1, "Interview scheduled": 2,
+  "Applied": 3, "Selected!": 3, "Call picked but no vacancies there": 4,
+  "Incoming not allowed": 5, "Wrong number": 6, "Ringing but no response": 7,
+  "Pending": 8, "Not Applied": 9, "Not called": 10, "Rejected": 99,
+};
+
 const JOB_META: Record<string, { label: string; color: string; bg: string; border: string }> = {
   pending:        { label: "Not Applied",   color: "#c0392b", bg: "#fff5f5", border: "#f5c6c6" },
   applied:        { label: "Applied",        color: "#1a7a3c", bg: "#f0faf4", border: "#b7eb8f" },
@@ -119,7 +126,27 @@ export default function AnalyticsView() {
     }
   }, [grouped, selectedDay]);
 
-  const visibleGroups = selectedDay === "all" ? grouped : grouped.filter(g => g.key === selectedDay);
+  const [selectedStatus, setSelectedStatus] = useState<string>("all");
+
+  const statusChips = useMemo(() => {
+    const map = new Map<string, { label: string; color: string; bg: string; border: string; count: number }>();
+    grouped.forEach(g => g.items.forEach(row => {
+      const existing = map.get(row.status);
+      if (existing) existing.count += 1;
+      else map.set(row.status, { label: row.status, color: row.color, bg: row.bg, border: row.border, count: 1 });
+    }));
+    return [...map.values()].sort((a, b) => (RANK[a.label] ?? 50) - (RANK[b.label] ?? 50));
+  }, [grouped]);
+
+  useEffect(() => {
+    if (selectedStatus !== "all" && !statusChips.some(s => s.label === selectedStatus)) {
+      setSelectedStatus("all");
+    }
+  }, [statusChips, selectedStatus]);
+
+  const visibleGroups = (selectedDay === "all" ? grouped : grouped.filter(g => g.key === selectedDay))
+    .map(g => ({ ...g, items: selectedStatus === "all" ? g.items : g.items.filter(r => r.status === selectedStatus) }))
+    .filter(g => g.items.length > 0);
 
   function chipLabel(key: string): string {
     const [y, m, d] = key.split("-").map(Number);
@@ -178,6 +205,37 @@ export default function AnalyticsView() {
           ))}
         </div>
 
+        <div className="date-slider" role="tablist" aria-label="Filter by status" style={{ marginBottom: 20 }}>
+          <button
+            type="button"
+            className={`status-chip ${selectedStatus === "all" ? "active" : ""}`}
+            aria-selected={selectedStatus === "all"}
+            onClick={() => setSelectedStatus("all")}
+          >
+            All categories
+          </button>
+          {statusChips.map(chip => (
+            <button
+              key={chip.label}
+              type="button"
+              aria-selected={selectedStatus === chip.label}
+              className={`status-chip ${selectedStatus === chip.label ? "active" : ""}`}
+              onClick={() => setSelectedStatus(chip.label)}
+              style={selectedStatus === chip.label ? { background: chip.color, borderColor: chip.color, color: "#fff" } : { borderColor: chip.border }}
+            >
+              <span style={{ width: 8, height: 8, borderRadius: "50%", background: selectedStatus === chip.label ? "#fff" : chip.color, flexShrink: 0 }} aria-hidden="true" />
+              {chip.label}
+              <span style={{ opacity: .75, fontWeight: 800 }}>{chip.count}</span>
+            </button>
+          ))}
+        </div>
+
+        {visibleGroups.length === 0 ? (
+          <div className="empty-state">
+            <div className="empty-state-title">Is filter mein kuch nahi</div>
+            <p>Doosri date ya category select karo.</p>
+          </div>
+        ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 26 }}>
           {visibleGroups.map(group => (
             <div key={group.key}>
@@ -212,10 +270,21 @@ export default function AnalyticsView() {
             </div>
           ))}
         </div>
+        )}
         </>
       )}
 
       <style>{`
+        .status-chip {
+          flex: 0 0 auto; scroll-snap-align: start; cursor: pointer;
+          display: inline-flex; align-items: center; gap: 7px;
+          padding: 8px 13px; border-radius: 999px;
+          border: 1.5px solid var(--hairline); background: var(--canvas);
+          font-family: inherit; font-size: 12px; font-weight: 700; color: var(--body);
+          white-space: nowrap; transition: all 0.12s;
+        }
+        .status-chip:hover { border-color: var(--mute); }
+        .status-chip.active { background: var(--ink); border-color: var(--ink); color: var(--canvas); }
         .date-slider {
           display: flex; gap: 8px; overflow-x: auto; padding: 4px 2px 12px;
           margin-bottom: 18px; scroll-snap-type: x proximity; -webkit-overflow-scrolling: touch;

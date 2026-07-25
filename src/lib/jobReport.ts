@@ -64,12 +64,28 @@ export function bruteLeadsWithTodayActivity(leads: BruteForceJob[], today = new 
     .sort((a, b) => millisOf(b.updatedAt) - millisOf(a.updatedAt));
 }
 
-function bruteStatusMeta(lead: BruteForceJob) {
-  const key = (lead.decision as BruteForceDecision) !== "pending"
+function bruteStatusKey(lead: BruteForceJob): string {
+  return (lead.decision as BruteForceDecision) !== "pending"
     ? (lead.decision as string)
     : (lead.callOutcome as BruteForceCallOutcome as string);
-  return BRUTE_STATUS_META[key] ?? BRUTE_STATUS_META.not_called;
 }
+
+function bruteStatusMeta(lead: BruteForceJob) {
+  return BRUTE_STATUS_META[bruteStatusKey(lead)] ?? BRUTE_STATUS_META.not_called;
+}
+
+// Category ranking for the report — best on top, rejected always last.
+const BRUTE_RANK: Record<string, number> = {
+  selected: 0,
+  resume_sent: 1,
+  success: 2,
+  no_vacancies: 3,
+  incoming_not_allowed: 4,
+  wrong_number: 5,
+  no_response: 6,
+  not_called: 7,
+  rejected: 8,
+};
 
 export function buildDailyJobReportHtml(
   jobs: JobCard[],
@@ -90,13 +106,22 @@ export function buildDailyJobReportHtml(
     </tr>`;
   }).join("");
 
-  const bruteRows = bruteLeads.map((lead, index) => {
+  const rankedLeads = [...bruteLeads].sort((a, b) => {
+    const ra = BRUTE_RANK[bruteStatusKey(a)] ?? 99;
+    const rb = BRUTE_RANK[bruteStatusKey(b)] ?? 99;
+    if (ra !== rb) return ra - rb;
+    return millisOf(b.updatedAt) - millisOf(a.updatedAt);
+  });
+  const bruteRows = rankedLeads.map((lead, index) => {
     const meta = bruteStatusMeta(lead);
+    const phoneCell = lead.phone
+      ? `<span class="act">${esc(lead.phone)}</span> <button type="button" class="copyb" data-phone="${esc(lead.phone)}">Copy</button>`
+      : `<span class="act">—</span>`;
     return `<tr>
       <td class="num" data-label="#">${index + 1}</td>
       <td data-label="Company"><span class="company">${esc(lead.company || "—")}</span><span class="role">${esc(lead.role || "")}</span></td>
       <td data-label="Location">${esc(lead.location || "—")}</td>
-      <td data-label="Phone"><span class="act">${esc(lead.phone || "—")}</span></td>
+      <td data-label="Phone">${phoneCell}</td>
       <td data-label="Status"><span class="badge" style="color:${meta.color};background:${meta.bg};border-color:${meta.border}">${esc(meta.label)}</span></td>
     </tr>`;
   }).join("");
@@ -132,6 +157,9 @@ export function buildDailyJobReportHtml(
   .role{display:block;color:#6e6e73;font-size:11px;margin-top:2px;}
   .act{font-size:11px;color:#6e6e73;}
   .badge{display:inline-block;padding:3px 9px;border-radius:999px;border:1px solid;font-size:11px;font-weight:700;}
+  .copyb{font-family:inherit;font-size:10px;font-weight:700;cursor:pointer;padding:2px 8px;margin-left:6px;border-radius:6px;border:1px solid #cbd5e1;background:#f8fafc;color:#334155;}
+  .copyb:hover{background:#eef2f7;}
+  .copyb.done{background:#dcfce7;border-color:#86efac;color:#15803d;}
   .foot{padding:16px 24px;font-size:11px;color:#8a8585;text-align:center;border-top:1px solid #eee;}
   @media print{body{background:#fff;padding:0;}.wrap{border:none;box-shadow:none;}}
   .wrap,td,th,.company,.role,.act{overflow-wrap:anywhere;word-break:break-word;}
@@ -171,5 +199,19 @@ export function buildDailyJobReportHtml(
   ${jobsSection}
   ${bruteSection}
   <div class="foot">Generated ${esc(new Date().toLocaleString("en-IN"))} · Tip: browser me Ctrl+P → “Save as PDF”</div>
-</div></body></html>`;
+</div>
+<script>
+  document.addEventListener('click', function (e) {
+    var b = e.target.closest('.copyb');
+    if (!b) return;
+    var phone = b.getAttribute('data-phone') || '';
+    var mark = function () { var t = b.textContent; b.textContent = 'Copied'; b.classList.add('done'); setTimeout(function () { b.textContent = t; b.classList.remove('done'); }, 1200); };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(phone).then(mark).catch(function () { window.prompt('Copy number:', phone); });
+    } else {
+      window.prompt('Copy number:', phone);
+    }
+  });
+</script>
+</body></html>`;
 }
