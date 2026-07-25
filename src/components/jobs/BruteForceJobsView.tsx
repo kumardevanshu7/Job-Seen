@@ -1056,8 +1056,10 @@ export default function BruteForceJobsView() {
             {nextRouteDates(10).map(dk => {
               const isActiveChip = dk === selectedRouteDate;
               const total = active.length;
+              // "Status change" = koi bhi outcome not_called ke alawa, us din record hua.
               const changed = total === 0 ? 0 : active.filter(lead =>
-                Array.isArray(lead.statusHistory) && lead.statusHistory.some(e => dateKeyFromDate(new Date(e.at)) === dk)
+                Array.isArray(lead.statusHistory) &&
+                lead.statusHistory.some(e => e.status !== "not_called" && dateKeyFromDate(new Date(e.at)) === dk)
               ).length;
               const allDone = total > 0 && changed === total;
               const dotColor = total === 0 ? "#d1d5db" : allDone ? "#16a34a" : changed > 0 ? "#ca8a04" : "#d1d5db";
