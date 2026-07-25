@@ -59,7 +59,7 @@ export default function LoginView() {
           position: sticky; top: 0; z-index: 10;
         }
         .landing-brand { display: flex; align-items: center; gap: 10px; }
-        .landing-brand img { width: 26px; height: 26px; border-radius: 7px; }
+        .landing-brand img { width: 28px; height: 28px; object-fit: contain; }
         .landing-brand span { font-size: 14px; font-weight: 800; letter-spacing: 0.1em; }
         .landing-nav-meta { font-size: 12px; color: var(--mute); }
         .landing-hero {
@@ -79,9 +79,9 @@ export default function LoginView() {
           margin-bottom: clamp(22px, 5vw, 34px); backdrop-filter: blur(4px);
         }
         .landing-logo-badge {
-          width: clamp(72px, 20vw, 104px); height: clamp(72px, 20vw, 104px);
-          border-radius: 24px; object-fit: contain; margin-bottom: 22px;
-          box-shadow: 0 18px 50px rgba(0,0,0,0.4);
+          width: clamp(84px, 22vw, 120px); height: clamp(84px, 22vw, 120px);
+          object-fit: contain; margin-bottom: 22px;
+          filter: drop-shadow(0 14px 34px rgba(0,0,0,0.45));
           animation: landingFloat 3.4s ease-in-out infinite;
         }
         .landing-title {

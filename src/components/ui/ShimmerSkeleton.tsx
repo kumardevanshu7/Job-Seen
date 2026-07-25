@@ -15,7 +15,7 @@ export default function ShimmerSkeleton({ variant = "jobs", count = 3 }: Props) 
           alt="JobSeen"
           width={56}
           height={56}
-          style={{ borderRadius: 14, objectFit: "contain", animation: "jobseenLogoPulse 1.3s ease-in-out infinite" }}
+          style={{ objectFit: "contain", animation: "jobseenLogoPulse 1.3s ease-in-out infinite" }}
         />
         <div className="shimmer-bg shimmer-line" style={{ width: 160, height: 14 }} />
         <div className="shimmer-bg shimmer-line" style={{ width: 110, height: 10 }} />
