@@ -7,12 +7,29 @@ const FEATURES = [
   { tag: "[3]", title: "Brute Force + Reminders", desc: "Company leads track karo, follow-up kabhi miss mat karo." },
 ];
 
+const TYPED_COMMAND = "$ ./jobseen --track --collaborate";
+
 export default function LoginView() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [mounted, setMounted] = useState(false);
+  const [typed, setTyped] = useState("");
+  const [typingDone, setTypingDone] = useState(false);
 
   useEffect(() => { setMounted(true); }, []);
+
+  useEffect(() => {
+    let index = 0;
+    const timer = window.setInterval(() => {
+      index += 1;
+      setTyped(TYPED_COMMAND.slice(0, index));
+      if (index >= TYPED_COMMAND.length) {
+        window.clearInterval(timer);
+        setTypingDone(true);
+      }
+    }, 55);
+    return () => window.clearInterval(timer);
+  }, []);
 
   async function handleGoogleSignIn() {
     setLoading(true);
@@ -115,6 +132,10 @@ export default function LoginView() {
         }
         .reveal { opacity: 0; }
         .reveal.on { animation: fade-in-up 0.7s ease-out forwards; }
+        .landing-pill { min-height: 1.4em; white-space: nowrap; }
+        .landing-caret { display: inline-block; margin-left: 1px; color: #c9c4ff; transform: translateY(1px); }
+        .landing-caret.blink { animation: caretBlink 1s step-end infinite; }
+        @keyframes caretBlink { 0%,100% { opacity: 1; } 50% { opacity: 0; } }
         @keyframes landingFloat { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }
         @media (max-width: 520px) { .landing-nav-meta { display: none; } }
       `}</style>
@@ -128,7 +149,10 @@ export default function LoginView() {
       </header>
 
       <main className="landing-hero">
-        <span className={`landing-pill reveal ${mounted ? "on" : ""}`}>$ ./jobseen --track --collaborate</span>
+        <span className={`landing-pill reveal ${mounted ? "on" : ""}`} aria-label={TYPED_COMMAND}>
+          <span>{typed}</span>
+          <span className={`landing-caret ${typingDone ? "blink" : ""}`} aria-hidden="true">▋</span>
+        </span>
         <img
           className={`landing-logo-badge reveal ${mounted ? "on" : ""}`}
           src="/logo/android-chrome-512x512.png"
