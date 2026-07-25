@@ -110,6 +110,26 @@ export default function AnalyticsView() {
   }, [jobs, leads]);
 
   const totalChanges = grouped.reduce((sum, g) => sum + g.items.length, 0);
+  const [selectedDay, setSelectedDay] = useState<string>("all");
+
+  useEffect(() => {
+    if (selectedDay !== "all" && !grouped.some(g => g.key === selectedDay)) {
+      setSelectedDay("all");
+    }
+  }, [grouped, selectedDay]);
+
+  const visibleGroups = selectedDay === "all" ? grouped : grouped.filter(g => g.key === selectedDay);
+
+  function chipLabel(key: string): string {
+    const [y, m, d] = key.split("-").map(Number);
+    const date = new Date(y, m - 1, d);
+    return date.toLocaleDateString("en-IN", { day: "numeric", month: "short" });
+  }
+
+  function chipWeekday(key: string): string {
+    const [y, m, d] = key.split("-").map(Number);
+    return new Date(y, m - 1, d).toLocaleDateString("en-IN", { weekday: "short" });
+  }
 
   if (loading) return <><ToastProvider /><ShimmerSkeleton variant="jobs" count={4} /></>;
 
@@ -129,8 +149,36 @@ export default function AnalyticsView() {
           <p>Jab aap kisi job ya Brute Force lead ka status change karoge, woh yahan date-wise dikhega.</p>
         </div>
       ) : (
-        <div style={{ display: "flex", flexDirection: "column", gap: 26 }}>
+        <>
+        <div className="date-slider" role="tablist" aria-label="Filter by date">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={selectedDay === "all"}
+            className={`date-chip ${selectedDay === "all" ? "active" : ""}`}
+            onClick={() => setSelectedDay("all")}
+          >
+            <span className="date-chip-top">All</span>
+            <span className="date-chip-sub">{totalChanges}</span>
+          </button>
           {grouped.map(group => (
+            <button
+              key={group.key}
+              type="button"
+              role="tab"
+              aria-selected={selectedDay === group.key}
+              className={`date-chip ${selectedDay === group.key ? "active" : ""}`}
+              onClick={() => setSelectedDay(group.key)}
+            >
+              <span className="date-chip-week">{chipWeekday(group.key)}</span>
+              <span className="date-chip-top">{chipLabel(group.key)}</span>
+              <span className="date-chip-sub">{group.items.length}</span>
+            </button>
+          ))}
+        </div>
+
+        <div style={{ display: "flex", flexDirection: "column", gap: 26 }}>
+          {visibleGroups.map(group => (
             <div key={group.key}>
               <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
                 <span style={{ fontSize: 13, fontWeight: 800, color: "var(--ink)" }}>{dayLabel(group.key)}</span>
@@ -163,9 +211,28 @@ export default function AnalyticsView() {
             </div>
           ))}
         </div>
+        </>
       )}
 
       <style>{`
+        .date-slider {
+          display: flex; gap: 8px; overflow-x: auto; padding: 4px 2px 12px;
+          margin-bottom: 18px; scroll-snap-type: x proximity; -webkit-overflow-scrolling: touch;
+        }
+        .date-slider::-webkit-scrollbar { height: 6px; }
+        .date-slider::-webkit-scrollbar-thumb { background: var(--hairline); border-radius: 999px; }
+        .date-chip {
+          flex: 0 0 auto; scroll-snap-align: start; cursor: pointer;
+          display: flex; flex-direction: column; align-items: center; gap: 2px;
+          min-width: 62px; padding: 8px 12px; border-radius: 10px;
+          border: 1.5px solid var(--hairline); background: var(--canvas);
+          font-family: inherit; color: var(--body); transition: all 0.12s;
+        }
+        .date-chip:hover { border-color: var(--mute); }
+        .date-chip.active { background: var(--ink); border-color: var(--ink); color: var(--canvas); }
+        .date-chip-week { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; opacity: .7; }
+        .date-chip-top { font-size: 13px; font-weight: 800; white-space: nowrap; }
+        .date-chip-sub { font-size: 10px; font-weight: 700; opacity: .8; }
         .analytics-table { border: 1px solid var(--hairline); border-radius: 10px; overflow: hidden; }
         .analytics-row {
           display: grid; grid-template-columns: 72px 1fr 96px 150px;
