@@ -465,6 +465,7 @@ export default function BruteForceJobsView() {
   const [bulkDeleteIds, setBulkDeleteIds] = useState<string[] | null>(null);
   const [bulkDeleting, setBulkDeleting] = useState(false);
   const [bulkDeleteError, setBulkDeleteError] = useState("");
+  const [reportBusy, setReportBusy] = useState(false);
   const [now, setNow] = useState(Date.now());
 
   const [scheduleId, setScheduleId] = useState<string | null>(null);
@@ -545,29 +546,43 @@ export default function BruteForceJobsView() {
     });
   }
 
-  function downloadTodayReport() {
+  async function downloadTodayReport() {
+    if (reportBusy) return;
     const today = new Date();
+    // Aaj koi bhi activity: status/decision update, success, reschedule, ya create.
     const todaysLeads = leads
-      .filter(lead => lead.callOutcome !== "not_called" && isSameDay(toMillis(lead.updatedAt), today))
+      .filter(lead =>
+        isSameDay(toMillis(lead.updatedAt), today)
+        || isSameDay(toMillis(lead.successAt), today)
+        || isSameDay(toMillis(lead.interviewRescheduledAt), today)
+        || isSameDay(toMillis(lead.createdAt), today)
+      )
       .sort((a, b) => toMillis(b.updatedAt) - toMillis(a.updatedAt));
 
     if (todaysLeads.length === 0) {
-      showToast("Aaj kisi card ka status update nahi hua.", "info");
+      showToast("Aaj kisi card ki koi activity nahi hui.", "info");
       return;
     }
 
-    const html = buildTodayReportHtml(todaysLeads, auth.profile?.username ?? "user");
-    const blob = new Blob([html], { type: "text/html;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const stamp = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `BruteForce_Report_${stamp}.html`;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(url);
-    showToast(`${todaysLeads.length} cards ka aaj ka report download ho gaya.`, "success");
+    setReportBusy(true);
+    try {
+      // Chhota sa mast loading moment.
+      await new Promise(resolve => window.setTimeout(resolve, 900));
+      const html = buildTodayReportHtml(todaysLeads, auth.profile?.username ?? "user");
+      const blob = new Blob([html], { type: "text/html;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const stamp = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `BruteForce_Report_${stamp}.html`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      showToast(`${todaysLeads.length} cards ka aaj ka report download ho gaya.`, "success");
+    } finally {
+      setReportBusy(false);
+    }
   }
 
   function openBulkDelete() {
@@ -850,6 +865,19 @@ export default function BruteForceJobsView() {
         .json-loader-percent { position: absolute; top: 57px; font-size: 9px; font-weight: 800; color: var(--mute); letter-spacing: 0.03em; }
         .json-progress-active { background: linear-gradient(90deg, #7c3aed, #0ea5e9, #22c55e, #7c3aed) !important; background-size: 200% 100% !important; animation: jsonProgressFlow 1.2s linear infinite; }
       `}</style>
+      {reportBusy && (
+        <div style={{ position: "fixed", inset: 0, zIndex: 2200, display: "flex", alignItems: "center", justifyContent: "center", padding: 20, background: "rgba(15,0,0,0.4)", backdropFilter: "blur(3px)" }}>
+          <div role="dialog" aria-modal="true" aria-live="polite" style={{ width: "min(360px, 100%)", border: "1px solid var(--hairline-strong)", borderRadius: 14, padding: 28, background: "var(--canvas)", boxShadow: "0 18px 60px rgba(15,0,0,0.24)", textAlign: "center", animation: "jsonModalIn 180ms ease-out" }}>
+            <div className="json-import-loader" aria-hidden="true" style={{ margin: "0 auto 6px" }}>
+              <span className="json-loader-orbit json-loader-orbit-a" />
+              <span className="json-loader-orbit json-loader-orbit-b" />
+              <span className="json-loader-core" />
+            </div>
+            <h2 style={{ margin: "14px 0 4px", fontSize: 16, color: "var(--ink)" }}>Building today's report</h2>
+            <p style={{ margin: 0, fontSize: 12, color: "var(--mute)", lineHeight: 1.5 }}>Aaj ki activity collect ho rahi hai…</p>
+          </div>
+        </div>
+      )}
       {importProgress && (
         <div
           style={{
@@ -942,8 +970,8 @@ export default function BruteForceJobsView() {
               AI se company list nikalo, phone number pe call milao, aur yahan track karo — no response, wrong number, incoming not allowed, no vacancies, ya interview mil gaya.
             </p>
           </div>
-          <button type="button" className="btn btn-secondary btn-sm" onClick={downloadTodayReport} style={{ whiteSpace: "nowrap" }}>
-            ↓ Today's report
+          <button type="button" className="btn btn-secondary btn-sm" onClick={downloadTodayReport} disabled={reportBusy} style={{ whiteSpace: "nowrap" }}>
+            {reportBusy ? "Preparing…" : "↓ Today's report"}
           </button>
         </div>
       </div>

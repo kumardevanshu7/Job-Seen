@@ -37,6 +37,7 @@ export default function HomeView() {
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
   const [deleteBusy, setDeleteBusy] = useState(false);
   const [deleteError, setDeleteError] = useState("");
+  const [reportBusy, setReportBusy] = useState(false);
   const [viewMode, setViewMode] = useState<string>("list");
   const [filterTab, setFilterTab] = useState<"all" | "mine" | "copied">("all");
   const [dateBasis, setDateBasis] = useState<"added" | "applied">("added");
@@ -76,25 +77,32 @@ export default function HomeView() {
     setDeleteTarget(id);
   }
 
-  function downloadTodayReport() {
+  async function downloadTodayReport() {
+    if (reportBusy) return;
     const today = new Date();
     const todaysJobs = jobsWithTodayActivity(jobs, today);
     if (todaysJobs.length === 0) {
       showToast("Aaj koi job activity nahi hui.", "info");
       return;
     }
-    const html = buildDailyJobReportHtml(todaysJobs, auth.profile?.username ?? "user", today);
-    const blob = new Blob([html], { type: "text/html;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const stamp = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `JobSeen_Report_${stamp}.html`;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(url);
-    showToast(`${todaysJobs.length} jobs ka aaj ka report download ho gaya.`, "success");
+    setReportBusy(true);
+    try {
+      await new Promise(resolve => window.setTimeout(resolve, 900));
+      const html = buildDailyJobReportHtml(todaysJobs, auth.profile?.username ?? "user", today);
+      const blob = new Blob([html], { type: "text/html;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const stamp = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `JobSeen_Report_${stamp}.html`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      showToast(`${todaysJobs.length} jobs ka aaj ka report download ho gaya.`, "success");
+    } finally {
+      setReportBusy(false);
+    }
   }
 
   function openJob(job: JobCardType) {
@@ -196,6 +204,30 @@ export default function HomeView() {
         />
       )}
 
+      {reportBusy && (
+        <div style={{ position: "fixed", inset: 0, zIndex: 2200, display: "flex", alignItems: "center", justifyContent: "center", padding: 20, background: "rgba(15,0,0,0.4)", backdropFilter: "blur(3px)" }}>
+          <div role="dialog" aria-modal="true" aria-live="polite" style={{ width: "min(360px, 100%)", border: "1px solid var(--hairline)", borderRadius: 14, padding: 28, background: "var(--canvas)", boxShadow: "0 18px 60px rgba(15,0,0,0.24)", textAlign: "center" }}>
+            <div className="report-loader" aria-hidden="true">
+              <span className="report-orbit report-orbit-a" />
+              <span className="report-orbit report-orbit-b" />
+              <span className="report-core" />
+            </div>
+            <h2 style={{ margin: "16px 0 4px", fontSize: 16, color: "var(--ink)" }}>Building today's report</h2>
+            <p style={{ margin: 0, fontSize: 12, color: "var(--mute)", lineHeight: 1.5 }}>Aaj ki activity collect ho rahi hai…</p>
+          </div>
+          <style>{`
+            @keyframes reportSpin { to { transform: rotate(360deg); } }
+            @keyframes reportSpinRev { to { transform: rotate(-360deg); } }
+            @keyframes reportPulse { 0%,100% { transform: scale(.7); opacity: .45; } 50% { transform: scale(1); opacity: 1; } }
+            .report-loader { position: relative; width: 52px; height: 52px; margin: 0 auto; display: grid; place-items: center; }
+            .report-orbit { position: absolute; border-radius: 50%; border: 2px solid transparent; }
+            .report-orbit-a { inset: 0; border-top-color: #7c3aed; border-right-color: #7c3aed; animation: reportSpin .9s linear infinite; }
+            .report-orbit-b { inset: 7px; border-bottom-color: #0ea5e9; border-left-color: #0ea5e9; animation: reportSpinRev .72s linear infinite; }
+            .report-core { width: 9px; height: 9px; border-radius: 50%; background: #22c55e; box-shadow: 0 0 14px #22c55e; animation: reportPulse .85s ease-in-out infinite; }
+          `}</style>
+        </div>
+      )}
+
       <div className="page-header">
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 16 }}>
           <h1 className="page-title" style={{ display: "flex", alignItems: "center", gap: 12 }}>
@@ -235,8 +267,8 @@ export default function HomeView() {
               ))}
             </div>
 
-            <button type="button" className="btn btn-secondary" onClick={downloadTodayReport} style={{ whiteSpace: "nowrap" }}>
-              ↓ Today's report
+            <button type="button" className="btn btn-secondary" onClick={downloadTodayReport} disabled={reportBusy} style={{ whiteSpace: "nowrap" }}>
+              {reportBusy ? "Preparing…" : "↓ Today's report"}
             </button>
             <a href="/add-job" className="btn btn-primary" style={{ textDecoration: "none" }}>
               + Add job
