@@ -129,7 +129,7 @@ service cloud.firestore {
           'ownerUID', 'ownerUsername', 'company', 'location', 'role', 'ctc',
           'applyLink', 'appliedVia', 'appliedViaOther', 'batch', 'bond', 'lastDate',
           'copiedFromUID', 'copiedFromUsername', 'createdAt', 'status', 'appliedAt',
-          'reminderDismissedAt', 'cancelReason', 'jobType', 'mapLink', 'nearestMetro',
+          'statusUpdatedAt', 'reminderDismissedAt', 'cancelReason', 'jobType', 'mapLink', 'nearestMetro',
           'routeOrder', 'onRoute', 'employmentType', 'internshipMonths', 'ppo'
         ])
         && data.ownerUID is string
@@ -158,6 +158,7 @@ service cloud.firestore {
         ])
         && (!('lastDate' in data) || data.lastDate == null || data.lastDate is timestamp)
         && (!('appliedAt' in data) || data.appliedAt == null || data.appliedAt is timestamp)
+        && (!('statusUpdatedAt' in data) || data.statusUpdatedAt == null || data.statusUpdatedAt is timestamp)
         && (!('reminderDismissedAt' in data) || data.reminderDismissedAt == null || data.reminderDismissedAt is timestamp)
         && (!('copiedFromUID' in data) || data.copiedFromUID == null || data.copiedFromUID is string)
         && (!('copiedFromUsername' in data) || data.copiedFromUsername == null || data.copiedFromUsername is string)

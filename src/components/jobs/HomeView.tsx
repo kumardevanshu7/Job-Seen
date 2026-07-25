@@ -4,6 +4,7 @@ import { $auth } from "../../stores/authStore";
 import { subscribeToUserJobs, updateJobStatus } from "../../lib/firestore";
 import type { JobCard as JobCardType, JobStatus } from "../../lib/firestore";
 import { deleteJobWithAnswer, deletionProtectionError } from "../../lib/deletionProtection";
+import { jobsWithTodayActivity, buildDailyJobReportHtml } from "../../lib/jobReport";
 import JobCard from "./JobCard";
 import { ToastProvider, showToast } from "../ui/Toast";
 import DeletionChallengeModal from "../ui/DeletionChallengeModal";
@@ -73,6 +74,27 @@ export default function HomeView() {
   function handleDelete(id: string) {
     setDeleteError("");
     setDeleteTarget(id);
+  }
+
+  function downloadTodayReport() {
+    const today = new Date();
+    const todaysJobs = jobsWithTodayActivity(jobs, today);
+    if (todaysJobs.length === 0) {
+      showToast("Aaj koi job activity nahi hui.", "info");
+      return;
+    }
+    const html = buildDailyJobReportHtml(todaysJobs, auth.profile?.username ?? "user", today);
+    const blob = new Blob([html], { type: "text/html;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const stamp = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `JobSeen_Report_${stamp}.html`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    showToast(`${todaysJobs.length} jobs ka aaj ka report download ho gaya.`, "success");
   }
 
   function openJob(job: JobCardType) {
@@ -213,6 +235,9 @@ export default function HomeView() {
               ))}
             </div>
 
+            <button type="button" className="btn btn-secondary" onClick={downloadTodayReport} style={{ whiteSpace: "nowrap" }}>
+              ↓ Today's report
+            </button>
             <a href="/add-job" className="btn btn-primary" style={{ textDecoration: "none" }}>
               + Add job
             </a>

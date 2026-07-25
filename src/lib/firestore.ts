@@ -66,6 +66,7 @@ export interface JobCard {
   // Application tracking
   status?: JobStatus;
   appliedAt?: any;       // when user clicked "Applied"
+  statusUpdatedAt?: any; // last time status was changed (for daily reports)
   reminderDismissedAt?: any; // when user dismissed the 3-day reminder
   cancelReason?: string;
   // Online vs Walk-in
@@ -476,7 +477,7 @@ export async function updateJobStatus(
   status: JobStatus,
   extra?: { appliedAt?: any; reminderDismissedAt?: any; cancelReason?: string }
 ): Promise<void> {
-  const updates: any = { status };
+  const updates: any = { status, statusUpdatedAt: serverTimestamp() };
   if (extra?.appliedAt !== undefined) updates.appliedAt = extra.appliedAt;
   if (extra?.reminderDismissedAt !== undefined) updates.reminderDismissedAt = extra.reminderDismissedAt;
   if (extra?.cancelReason !== undefined) updates.cancelReason = extra.cancelReason;
