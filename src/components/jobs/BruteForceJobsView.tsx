@@ -1054,25 +1054,48 @@ export default function BruteForceJobsView() {
           </div>
           <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 4 }}>
             {nextRouteDates(10).map(dk => {
-              const active = dk === selectedRouteDate;
+              const isActiveChip = dk === selectedRouteDate;
+              const total = active.length;
+              const changed = total === 0 ? 0 : active.filter(lead =>
+                Array.isArray(lead.statusHistory) && lead.statusHistory.some(e => dateKeyFromDate(new Date(e.at)) === dk)
+              ).length;
+              const allDone = total > 0 && changed === total;
+              const dotColor = total === 0 ? "#d1d5db" : allDone ? "#16a34a" : changed > 0 ? "#ca8a04" : "#d1d5db";
               return (
                 <button
                   key={dk}
                   type="button"
                   onClick={() => setSelectedRouteDate(dk)}
+                  title={total === 0 ? "Koi active lead nahi" : allDone ? "Is din sab active leads ka status change hua ✓" : `${changed}/${total} active leads ka status change hua`}
                   style={{
                     flex: "0 0 auto", cursor: "pointer", fontFamily: "inherit",
-                    minWidth: 60, padding: "8px 12px", borderRadius: 10,
-                    border: `1.5px solid ${active ? "var(--ink)" : "var(--hairline)"}`,
-                    background: active ? "var(--ink)" : "var(--canvas)",
-                    color: active ? "var(--canvas)" : "var(--body)",
+                    display: "flex", flexDirection: "column", alignItems: "center", gap: 5,
+                    minWidth: 62, padding: "8px 12px", borderRadius: 10,
+                    border: `1.5px solid ${isActiveChip ? "var(--ink)" : "var(--hairline)"}`,
+                    background: isActiveChip ? "var(--ink)" : "var(--canvas)",
+                    color: isActiveChip ? "var(--canvas)" : "var(--body)",
                     fontSize: 12, fontWeight: 700, whiteSpace: "nowrap",
                   }}
                 >
                   {routeDateLabel(dk)}
+                  <span
+                    aria-hidden="true"
+                    style={{
+                      width: 12, height: 12, borderRadius: "50%",
+                      background: allDone ? dotColor : "transparent",
+                      border: `2px solid ${dotColor}`,
+                      display: "inline-flex", alignItems: "center", justifyContent: "center",
+                      color: "#fff", fontSize: 8, lineHeight: 1,
+                    }}
+                  >
+                    {allDone ? "✓" : ""}
+                  </span>
                 </button>
               );
             })}
+          </div>
+          <div style={{ fontSize: 10, color: "var(--mute)", marginTop: 6 }}>
+            Circle = us din sab active leads ka status change hua ya nahi (green ✓ = sab pe call karke status liya).
           </div>
         </div>
       )}
