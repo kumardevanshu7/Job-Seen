@@ -47,6 +47,23 @@ function isActiveOnRoute(j: JobCardType) {
   return (j.jobType ?? "online") === "walkin";
 }
 
+function todayKey(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+function routeDateOf(j: JobCardType): string {
+  return j.routeDate || todayKey();
+}
+
+function dateLabel(key: string): string {
+  const [y, m, d] = key.split("-").map(Number);
+  const date = new Date(y, m - 1, d);
+  const t = todayKey();
+  if (key === t) return "Today";
+  return date.toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short" });
+}
+
 export default function WalkInRouteView() {
   const auth = useStore($auth);
   const [allJobs, setAllJobs] = useState<JobCardType[]>([]);
@@ -61,6 +78,7 @@ export default function WalkInRouteView() {
   const [pickerOpen, setPickerOpen] = useState(false);
   const [bruteLeads, setBruteLeads] = useState<BruteForceJob[]>([]);
   const [addingId, setAddingId] = useState<string | null>(null);
+  const [selectedDate, setSelectedDate] = useState<string>(() => todayKey());
 
   const itemRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const flipRef = useRef<{
@@ -72,10 +90,17 @@ export default function WalkInRouteView() {
   const skipSnapshot = useRef(false);
 
   const routeJobs = allJobs
-    .filter(isActiveOnRoute)
+    .filter(j => isActiveOnRoute(j) && routeDateOf(j) === selectedDate)
     .sort((a, b) => (a.routeOrder ?? 0) - (b.routeOrder ?? 0));
 
   const availableJobs = allJobs.filter(j => !isActiveOnRoute(j));
+
+  // Dates that already have a route (for quick switching).
+  const routeDates = Array.from(
+    new Set(allJobs.filter(isActiveOnRoute).map(routeDateOf))
+  ).sort();
+  if (!routeDates.includes(selectedDate)) routeDates.push(selectedDate);
+  routeDates.sort();
 
   useEffect(() => {
     if (!auth.user) return;
@@ -183,8 +208,8 @@ export default function WalkInRouteView() {
 
   async function addToRoute(jobId: string) {
     try {
-      await setJobOnRoute(jobId, true, Date.now());
-      showToast("Added to active route.", "success");
+      await setJobOnRoute(jobId, true, Date.now(), selectedDate);
+      showToast(`Added to ${dateLabel(selectedDate)} route.`, "success");
     } catch {
       showToast("Couldn’t add to route.", "error");
     }
@@ -204,8 +229,8 @@ export default function WalkInRouteView() {
     setAddingId(lead.id);
     try {
       const routeId = bruteForceRouteJobId(auth.user.uid, lead.id);
-      await addBruteForceJobToRoute(lead, auth.user.uid, auth.profile.username, routeLeadIds.has(routeId));
-      showToast("Brute Force lead route mein add ho gaya.", "success");
+      await addBruteForceJobToRoute(lead, auth.user.uid, auth.profile.username, routeLeadIds.has(routeId), selectedDate);
+      showToast(`Brute Force lead ${dateLabel(selectedDate)} route mein add ho gaya.`, "success");
     } catch (err: any) {
       showToast(err.message ?? "Couldn’t add lead to route.", "error");
     } finally {
@@ -302,9 +327,9 @@ export default function WalkInRouteView() {
             }}
           >
             <div style={{ padding: "18px 18px 12px", borderBottom: "1px solid var(--hairline)" }}>
-              <div style={{ fontWeight: 700, fontSize: 16, color: "var(--ink)" }}>Add to route</div>
+              <div style={{ fontWeight: 700, fontSize: 16, color: "var(--ink)" }}>Add to {dateLabel(selectedDate)} route</div>
               <div style={{ fontSize: 12, color: "var(--mute)", marginTop: 4 }}>
-                Existing jobs hi — yahan se naya create nahi hota.
+                Jobs aur active Brute Force leads — select karke {dateLabel(selectedDate)} ke route mein daalo.
               </div>
             </div>
             <div style={{ overflowY: "auto", padding: 12, flex: 1 }}>
@@ -447,7 +472,7 @@ export default function WalkInRouteView() {
         </p>
       </div>
 
-      <div style={{ marginBottom: 16, display: "flex", gap: 10, flexWrap: "wrap" }}>
+      <div style={{ marginBottom: 12, display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
         <button
           type="button"
           className="btn btn-primary"
@@ -455,6 +480,42 @@ export default function WalkInRouteView() {
         >
           + Add to route
         </button>
+        <label style={{ display: "inline-flex", alignItems: "center", gap: 8, fontSize: 12, color: "var(--mute)", fontFamily: "inherit" }}>
+          Route date
+          <input
+            type="date"
+            value={selectedDate}
+            min={todayKey()}
+            onChange={e => setSelectedDate(e.target.value || todayKey())}
+            className="form-input"
+            style={{ width: "auto", height: 34, fontSize: 12, fontFamily: "inherit", padding: "0 10px" }}
+          />
+        </label>
+      </div>
+
+      <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 12, marginBottom: 12 }}>
+        {routeDates.map(dk => {
+          const count = allJobs.filter(j => isActiveOnRoute(j) && routeDateOf(j) === dk).length;
+          const active = dk === selectedDate;
+          return (
+            <button
+              key={dk}
+              type="button"
+              onClick={() => setSelectedDate(dk)}
+              style={{
+                flex: "0 0 auto", cursor: "pointer", fontFamily: "inherit",
+                display: "flex", flexDirection: "column", alignItems: "center", gap: 2,
+                minWidth: 64, padding: "8px 12px", borderRadius: 10,
+                border: `1.5px solid ${active ? "var(--ink)" : "var(--hairline)"}`,
+                background: active ? "var(--ink)" : "var(--canvas)",
+                color: active ? "var(--canvas)" : "var(--body)",
+              }}
+            >
+              <span style={{ fontSize: 12, fontWeight: 800, whiteSpace: "nowrap" }}>{dateLabel(dk)}</span>
+              <span style={{ fontSize: 10, fontWeight: 700, opacity: 0.8 }}>{count} stop{count === 1 ? "" : "s"}</span>
+            </button>
+          );
+        })}
       </div>
 
       {loading ? (

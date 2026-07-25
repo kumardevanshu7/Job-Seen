@@ -75,6 +75,7 @@ export interface JobCard {
   nearestMetro?: string;
   routeOrder?: number;   // custom visit order for walk-ins / routed online
   onRoute?: boolean;     // optional: include online job on Walk-in Route
+  routeDate?: string;    // which day's route this job belongs to (YYYY-MM-DD)
   // Role kind
   employmentType?: EmploymentType; // full_time | part_time | internship
   internshipMonths?: string;       // e.g. "3"
@@ -351,14 +352,17 @@ export async function addBruteForceJobToRoute(
   lead: BruteForceJob,
   ownerUID: string,
   ownerUsername: string,
-  routeJobExists: boolean
+  routeJobExists: boolean,
+  routeDate?: string
 ): Promise<string> {
   if (!WALK_IN_ENABLED) throw new Error("Walk-in feature is currently disabled.");
   if (lead.ownerUID !== ownerUID) throw new Error("Only the lead owner can add it to a route.");
 
   const routeRef = doc(db, "jobs", bruteForceRouteJobId(ownerUID, lead.id));
   if (routeJobExists) {
-    await updateDoc(routeRef, { onRoute: true, routeOrder: Date.now() });
+    const updates: any = { onRoute: true, routeOrder: Date.now() };
+    if (routeDate) updates.routeDate = routeDate;
+    await updateDoc(routeRef, updates);
     return routeRef.id;
   }
 
@@ -379,6 +383,7 @@ export async function addBruteForceJobToRoute(
     routeOrder: Date.now(),
     onRoute: true,
     status: "pending",
+    ...(routeDate ? { routeDate } : {}),
   }), { merge: true });
   return routeRef.id;
 }
@@ -519,11 +524,15 @@ export async function updateJobRouteOrder(
 export async function setJobOnRoute(
   jobId: string,
   onRoute: boolean,
-  routeOrder?: number
+  routeOrder?: number,
+  routeDate?: string
 ): Promise<void> {
   if (!WALK_IN_ENABLED) throw new Error("Walk-in feature is currently disabled.");
   const updates: any = { onRoute };
-  if (onRoute) updates.routeOrder = routeOrder ?? Date.now();
+  if (onRoute) {
+    updates.routeOrder = routeOrder ?? Date.now();
+    if (routeDate) updates.routeDate = routeDate;
+  }
   await updateDoc(doc(db, "jobs", jobId), updates);
 }
 
