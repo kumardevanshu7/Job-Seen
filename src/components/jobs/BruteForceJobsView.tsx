@@ -421,6 +421,28 @@ function waitForNextPaint(): Promise<void> {
   return new Promise(resolve => requestAnimationFrame(() => resolve()));
 }
 
+function dateKeyFromDate(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+function nextRouteDates(count = 10): string[] {
+  const base = new Date();
+  return Array.from({ length: count }, (_, i) => {
+    const d = new Date(base);
+    d.setDate(base.getDate() + i);
+    return dateKeyFromDate(d);
+  });
+}
+
+function routeDateLabel(key: string): string {
+  const [y, m, d] = key.split("-").map(Number);
+  const date = new Date(y, m - 1, d);
+  if (key === dateKeyFromDate(new Date())) return "Today";
+  const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1);
+  if (key === dateKeyFromDate(tomorrow)) return "Tomorrow";
+  return date.toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short" });
+}
+
 export default function BruteForceJobsView() {
   const auth = useStore($auth);
   const [leads, setLeads] = useState<BruteForceJob[]>([]);
@@ -440,6 +462,7 @@ export default function BruteForceJobsView() {
   const [bulkDeleteIds, setBulkDeleteIds] = useState<string[] | null>(null);
   const [bulkDeleting, setBulkDeleting] = useState(false);
   const [bulkDeleteError, setBulkDeleteError] = useState("");
+  const [routePickLead, setRoutePickLead] = useState<BruteForceJob | null>(null);
   const [now, setNow] = useState(Date.now());
 
   const [scheduleId, setScheduleId] = useState<string | null>(null);
@@ -736,7 +759,7 @@ export default function BruteForceJobsView() {
     }
   }
 
-  async function handleAddToRoute(lead: BruteForceJob) {
+  async function addLeadToRouteOn(lead: BruteForceJob, routeDate: string) {
     if (!auth.user || !auth.profile) {
       showToast("Not logged in.", "error");
       return;
@@ -749,9 +772,11 @@ export default function BruteForceJobsView() {
         lead,
         auth.user.uid,
         auth.profile.username,
-        existingJobIds.has(routeJobId)
+        existingJobIds.has(routeJobId),
+        routeDate
       );
-      showToast("Walk-in Route mein add ho gaya. Route status alag track hoga.", "success");
+      setRoutePickLead(null);
+      showToast(`${routeDateLabel(routeDate)} ke Walk-in Route mein add ho gaya.`, "success");
     } catch (err: any) {
       showToast(err.message ?? "Walk-in Route mein add nahi ho paya.", "error");
     } finally {
@@ -774,6 +799,40 @@ export default function BruteForceJobsView() {
           onCancel={() => { if (busyId !== deleteTarget.id) { setDeleteTarget(null); setDeleteError(""); } }}
           onConfirm={confirmDelete}
         />
+      )}
+      {routePickLead && (
+        <>
+          <div onClick={() => { if (!busyId) setRoutePickLead(null); }} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", backdropFilter: "blur(2px)", zIndex: 9000 }} />
+          <div role="dialog" aria-modal="true" style={{ position: "fixed", top: "50%", left: "50%", transform: "translate(-50%,-50%)", zIndex: 9001, width: "min(460px, calc(100vw - 28px))", background: "var(--canvas)", border: "1.5px solid var(--hairline)", borderRadius: 12, padding: 22, boxShadow: "0 20px 60px rgba(0,0,0,0.2)", fontFamily: "inherit" }}>
+            <div style={{ fontSize: 15, fontWeight: 750, color: "var(--ink)" }}>Add to Walk-in Route</div>
+            <div style={{ fontSize: 12, color: "var(--mute)", marginTop: 4 }}>
+              “{routePickLead.company}” — kis din ke route mein daalna hai?
+            </div>
+            <div style={{ display: "flex", gap: 8, overflowX: "auto", padding: "14px 0 4px" }}>
+              {nextRouteDates(10).map(dk => (
+                <button
+                  key={dk}
+                  type="button"
+                  disabled={busyId === routePickLead.id}
+                  onClick={() => addLeadToRouteOn(routePickLead, dk)}
+                  style={{
+                    flex: "0 0 auto", cursor: "pointer", fontFamily: "inherit",
+                    minWidth: 62, padding: "9px 12px", borderRadius: 10,
+                    border: "1.5px solid var(--hairline)", background: "var(--canvas)",
+                    color: "var(--ink)", fontSize: 12, fontWeight: 700, whiteSpace: "nowrap",
+                  }}
+                >
+                  {routeDateLabel(dk)}
+                </button>
+              ))}
+            </div>
+            <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 14 }}>
+              <button type="button" className="btn btn-secondary btn-sm" disabled={busyId === routePickLead.id} onClick={() => setRoutePickLead(null)}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        </>
       )}
       {bulkDeleteIds && auth.user && (
         <DeletionChallengeModal
@@ -1125,7 +1184,7 @@ export default function BruteForceJobsView() {
                   scheduleMode={isActiveLead ? scheduleMode : "offline"}
                   scheduleAt={isActiveLead ? scheduleAt : ""}
                   onRoute={auth.user ? routeJobIds.has(bruteForceRouteJobId(auth.user.uid, lead.id)) : false}
-                  onAddToRoute={handleAddToRoute}
+                  onAddToRoute={l => setRoutePickLead(l)}
                   onScheduleMode={isActiveLead ? setScheduleMode : () => {}}
                   onScheduleAt={isActiveLead ? setScheduleAt : () => {}}
                   onOpenSchedule={isActiveLead ? openSchedule : () => {}}
