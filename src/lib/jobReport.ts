@@ -133,21 +133,27 @@ export function buildDailyJobReportHtml(
   .badge{display:inline-block;padding:3px 9px;border-radius:999px;border:1px solid;font-size:11px;font-weight:700;}
   .foot{padding:16px 24px;font-size:11px;color:#8a8585;text-align:center;border-top:1px solid #eee;}
   @media print{body{background:#fff;padding:0;}.wrap{border:none;box-shadow:none;}}
+  .wrap,td,th,.company,.role,.act{overflow-wrap:anywhere;word-break:break-word;}
   @media (max-width:600px){
-    body{padding:14px 10px;}
-    .wrap{border-radius:12px;}
-    .head{padding:18px 16px;gap:11px;}
-    .head img{width:34px;height:34px;}
-    .head h1{font-size:15px;}
-    .meta{padding:14px 16px;gap:7px 16px;}
-    .sec{padding:16px 16px 6px;}
+    body{padding:12px 8px;}
+    .wrap{border-radius:12px;max-width:100%;}
+    .head{padding:16px 14px;gap:10px;}
+    .head img{width:32px;height:32px;}
+    .head h1{font-size:14px;}
+    .head p{font-size:11px;}
+    .meta{padding:14px 14px;gap:6px 0;flex-direction:column;font-size:12px;}
+    .sec{padding:16px 14px 4px;}
     table,thead,tbody,tr,td{display:block;width:100%;}
     thead{position:absolute;left:-9999px;top:-9999px;}
-    tr{border:1px solid #efe9e9;border-radius:10px;margin:0 16px 12px;padding:6px 0;}
-    td{border:none;padding:7px 16px;display:flex;justify-content:space-between;gap:12px;align-items:flex-start;text-align:right;}
-    td::before{content:attr(data-label);font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;color:#8a8585;text-align:left;flex:0 0 auto;}
-    td.num{color:#a8a2a2;}
-    .company,.role{text-align:right;}
+    tr{border:1px solid #efe9e9;border-radius:10px;margin:0 14px 12px;padding:10px 0;background:#fff;}
+    td{border:none;padding:6px 14px;text-align:left;}
+    td::before{content:attr(data-label);display:block;font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:#a29c9c;margin-bottom:3px;}
+    td.num{display:none;}
+    tr{position:relative;}
+    tr td:first-child+td{padding-top:12px;}
+    .company{font-size:14px;}
+    .role{margin-top:2px;}
+    .badge{white-space:normal;}
     .foot{padding:14px 16px;}
   }
 </style></head>
