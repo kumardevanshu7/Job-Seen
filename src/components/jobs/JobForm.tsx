@@ -4,7 +4,7 @@ import { $auth } from "../../stores/authStore";
 import { createJob, createJobs, type EmploymentType, type JobType } from "../../lib/firestore";
 import { showToast, ToastProvider } from "../ui/Toast";
 import { safeExternalUrl } from "../../lib/security";
-import { WALK_IN_ENABLED } from "../../lib/features";
+import { WALK_IN_ADD_JOB_ENABLED } from "../../lib/features";
 import { parseOnlineJobImport } from "../../lib/onlineJobImport";
 
 const ONLINE_VIA = ["Naukri.com", "LinkedIn", "Company Website", "Referral", "Others"];
@@ -72,7 +72,7 @@ function employmentPayload(f: { employmentType: EmploymentType; internshipMonths
 
 export default function JobForm() {
   const auth = useStore($auth);
-  const [jobType, setJobType] = useState<JobType | null>(WALK_IN_ENABLED ? null : "online");
+  const [jobType, setJobType] = useState<JobType | null>(WALK_IN_ADD_JOB_ENABLED ? null : "online");
   const [online, setOnline] = useState<OnlineForm>(ONLINE_INIT);
   const [walkin, setWalkin] = useState<WalkinForm>(WALKIN_INIT);
   const [loading, setLoading] = useState(false);
@@ -253,7 +253,7 @@ export default function JobForm() {
 
   async function submitWalkin(e: React.FormEvent) {
     e.preventDefault();
-    if (!WALK_IN_ENABLED) { showToast("Walk-in feature is currently disabled.", "info"); return; }
+    if (!WALK_IN_ADD_JOB_ENABLED) { showToast("Add Job walk-in option is disabled.", "info"); return; }
     if (!walkin.role.trim()) { showToast("Role is required.", "error"); return; }
     if (!walkin.company.trim()) { showToast("Company is required.", "error"); return; }
     if (!walkin.location.trim()) { showToast("Location is required.", "error"); return; }
@@ -342,7 +342,7 @@ export default function JobForm() {
         </p>
       </div>
 
-      {WALK_IN_ENABLED && jobType === null && (
+      {WALK_IN_ADD_JOB_ENABLED && jobType === null && (
         <div
           className="job-type-picker"
           style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, maxWidth: 620 }}
@@ -387,7 +387,7 @@ export default function JobForm() {
 
       {jobType === "online" && (
         <div className="form-card" style={{ maxWidth: 620 }}>
-          {WALK_IN_ENABLED && (
+          {WALK_IN_ADD_JOB_ENABLED && (
             <button
               type="button"
               onClick={() => setJobType(null)}
@@ -496,7 +496,7 @@ export default function JobForm() {
         </div>
       )}
 
-      {WALK_IN_ENABLED && jobType === "walkin" && (
+      {WALK_IN_ADD_JOB_ENABLED && jobType === "walkin" && (
         <div className="form-card" style={{ maxWidth: 620 }}>
           <button
             type="button"

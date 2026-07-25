@@ -1,3 +1,8 @@
 // Product feature switches. These are baked into the static build.
-// Change to true and redeploy when the Walk-in workflow is needed again.
-export const WALK_IN_ENABLED = false;
+
+// Walk-in Route planner (page, nav, arrow ordering, add-to-route). Enabled.
+export const WALK_IN_ENABLED = true;
+
+// The "walk-in / offline" job TYPE option inside the Add Job form.
+// Kept off per request — Add Job stays online-only, but the Route feature works.
+export const WALK_IN_ADD_JOB_ENABLED = false;
