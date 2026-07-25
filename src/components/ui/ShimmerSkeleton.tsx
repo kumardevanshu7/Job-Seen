@@ -10,9 +10,16 @@ export default function ShimmerSkeleton({ variant = "jobs", count = 3 }: Props) 
         display: "flex", flexDirection: "column", alignItems: "center",
         justifyContent: "center", minHeight: "100vh", gap: 16, padding: 24,
       }}>
-        <div className="shimmer-bg" style={{ width: 56, height: 56, borderRadius: 12 }} />
+        <img
+          src="/logo/android-chrome-192x192.png"
+          alt="JobSeen"
+          width={56}
+          height={56}
+          style={{ borderRadius: 14, objectFit: "contain", animation: "jobseenLogoPulse 1.3s ease-in-out infinite" }}
+        />
         <div className="shimmer-bg shimmer-line" style={{ width: 160, height: 14 }} />
         <div className="shimmer-bg shimmer-line" style={{ width: 110, height: 10 }} />
+        <style>{`@keyframes jobseenLogoPulse { 0%,100% { opacity: .55; transform: scale(.94); } 50% { opacity: 1; transform: scale(1); } }`}</style>
       </div>
     );
   }
