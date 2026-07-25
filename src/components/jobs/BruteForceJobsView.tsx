@@ -495,9 +495,13 @@ export default function BruteForceJobsView() {
     return () => clearInterval(interval);
   }, []);
 
-  const active = useMemo(() => leads.filter(lead => lead.decision === "pending"), [leads]);
-  const selected = useMemo(() => leads.filter(lead => lead.decision === "selected"), [leads]);
-  const rejected = useMemo(() => leads.filter(lead => lead.decision === "rejected"), [leads]);
+  const dayLeads = useMemo(
+    () => leads.filter(lead => dateKeyFromDate(new Date(toMillis(lead.createdAt))) === selectedRouteDate),
+    [leads, selectedRouteDate]
+  );
+  const active = useMemo(() => dayLeads.filter(lead => lead.decision === "pending"), [dayLeads]);
+  const selected = useMemo(() => dayLeads.filter(lead => lead.decision === "selected"), [dayLeads]);
+  const rejected = useMemo(() => dayLeads.filter(lead => lead.decision === "rejected"), [dayLeads]);
   const sections: { id: LeadSection; label: string; items: BruteForceJob[]; emptyTitle: string; emptyText: string }[] = [
     {
       id: "active",
@@ -1053,14 +1057,19 @@ export default function BruteForceJobsView() {
             🗺️ Walk-in Route planner
           </div>
           <div style={{ fontSize: 11, color: "var(--mute)", marginBottom: 12, lineHeight: 1.5 }}>
-            Yeh sirf route planning ke liye hai. Neeche di gayi <b>active leads list date se change nahi hoti</b> — woh aapki poori call-list hai. Date choose karke “+ Add to Walk-in Route” us din ke route mein card daalega.
+            Date choose karo — neeche wali leads <b>usi din banayi gayi</b> cards dikhati hain. Jis din lead add/import karoge, woh usi din ke tab mein aayegi. Future date pe abhi 0 leads honge.
           </div>
           <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 4 }}>
             {nextRouteDates(10).map(dk => {
               const isActiveChip = dk === selectedRouteDate;
-              const total = active.length;
+              // Us din create hue active (pending) leads.
+              const dayActive = leads.filter(lead =>
+                lead.decision === "pending" &&
+                dateKeyFromDate(new Date(toMillis(lead.createdAt))) === dk
+              );
+              const total = dayActive.length;
               // "Status change" = koi bhi outcome not_called ke alawa, us din record hua.
-              const changed = total === 0 ? 0 : active.filter(lead =>
+              const changed = total === 0 ? 0 : dayActive.filter(lead =>
                 Array.isArray(lead.statusHistory) &&
                 lead.statusHistory.some(e => e.status !== "not_called" && dateKeyFromDate(new Date(e.at)) === dk)
               ).length;
