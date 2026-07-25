@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { useStore } from "@nanostores/react";
 import { $auth } from "../../stores/authStore";
-import { subscribeToUserJobs, updateJobStatus } from "../../lib/firestore";
-import type { JobCard as JobCardType, JobStatus } from "../../lib/firestore";
+import { subscribeToUserJobs, subscribeToBruteForceJobs, updateJobStatus } from "../../lib/firestore";
+import type { JobCard as JobCardType, JobStatus, BruteForceJob } from "../../lib/firestore";
 import { deleteJobWithAnswer, deletionProtectionError } from "../../lib/deletionProtection";
-import { jobsWithTodayActivity, buildDailyJobReportHtml } from "../../lib/jobReport";
+import { jobsWithTodayActivity, bruteLeadsWithTodayActivity, buildDailyJobReportHtml } from "../../lib/jobReport";
 import JobCard from "./JobCard";
 import { ToastProvider, showToast } from "../ui/Toast";
 import DeletionChallengeModal from "../ui/DeletionChallengeModal";
@@ -38,6 +38,7 @@ export default function HomeView() {
   const [deleteBusy, setDeleteBusy] = useState(false);
   const [deleteError, setDeleteError] = useState("");
   const [reportBusy, setReportBusy] = useState(false);
+  const [bruteLeads, setBruteLeads] = useState<BruteForceJob[]>([]);
   const [viewMode, setViewMode] = useState<string>("list");
   const [filterTab, setFilterTab] = useState<"all" | "mine" | "copied">("all");
   const [dateBasis, setDateBasis] = useState<"added" | "applied">("added");
@@ -69,7 +70,8 @@ export default function HomeView() {
       setJobs(data);
       setLoading(false);
     });
-    return () => unsub();
+    const unsubBrute = subscribeToBruteForceJobs(auth.user.uid, setBruteLeads);
+    return () => { unsub(); unsubBrute(); };
   }, [auth.user]);
 
   function handleDelete(id: string) {
@@ -81,14 +83,15 @@ export default function HomeView() {
     if (reportBusy) return;
     const today = new Date();
     const todaysJobs = jobsWithTodayActivity(jobs, today);
-    if (todaysJobs.length === 0) {
-      showToast("Aaj koi job activity nahi hui.", "info");
+    const todaysBrute = bruteLeadsWithTodayActivity(bruteLeads, today);
+    if (todaysJobs.length === 0 && todaysBrute.length === 0) {
+      showToast("Aaj kisi ka status change nahi hua.", "info");
       return;
     }
     setReportBusy(true);
     try {
       await new Promise(resolve => window.setTimeout(resolve, 900));
-      const html = buildDailyJobReportHtml(todaysJobs, auth.profile?.username ?? "user", today);
+      const html = buildDailyJobReportHtml(todaysJobs, auth.profile?.username ?? "user", today, todaysBrute);
       const blob = new Blob([html], { type: "text/html;charset=utf-8" });
       const url = URL.createObjectURL(blob);
       const stamp = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
@@ -99,7 +102,7 @@ export default function HomeView() {
       a.click();
       a.remove();
       URL.revokeObjectURL(url);
-      showToast(`${todaysJobs.length} jobs ka aaj ka report download ho gaya.`, "success");
+      showToast(`${todaysJobs.length + todaysBrute.length} items ka aaj ka report download ho gaya.`, "success");
     } finally {
       setReportBusy(false);
     }

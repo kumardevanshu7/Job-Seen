@@ -156,81 +156,7 @@ function localInputValue(value: any): string {
   return date.toISOString().slice(0, 16);
 }
 
-function isSameDay(millis: number, ref: Date): boolean {
-  if (!millis) return false;
-  const d = new Date(millis);
-  return d.getFullYear() === ref.getFullYear()
-    && d.getMonth() === ref.getMonth()
-    && d.getDate() === ref.getDate();
-}
 
-function escapeHtml(value: string): string {
-  return value
-    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
-}
-
-function statusLabelFor(lead: BruteForceJob): { label: string; color: string; bg: string; border: string } {
-  const key: DisplayStatus = lead.decision !== "pending"
-    ? (lead.decision as Exclude<BruteForceDecision, "pending">)
-    : lead.callOutcome;
-  return STATUS_STYLES[key];
-}
-
-function buildTodayReportHtml(leads: BruteForceJob[], username: string): string {
-  const today = new Date();
-  const dateLabel = today.toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
-  const rows = leads.map((lead, index) => {
-    const s = statusLabelFor(lead);
-    return `<tr>
-      <td class="num">${index + 1}</td>
-      <td><span class="company">${escapeHtml(lead.company || "—")}</span><span class="role">${escapeHtml(lead.role || "")}</span></td>
-      <td>${escapeHtml(lead.location || "—")}</td>
-      <td>${escapeHtml(lead.phone || "—")}</td>
-      <td><span class="badge" style="color:${s.color};background:${s.bg};border-color:${s.border}">${escapeHtml(s.label)}</span></td>
-    </tr>`;
-  }).join("");
-
-  return `<!DOCTYPE html>
-<html lang="en"><head><meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Brute Force Report · ${escapeHtml(dateLabel)}</title>
-<style>
-  *{box-sizing:border-box;margin:0;padding:0;}
-  body{font-family:'JetBrains Mono','IBM Plex Mono',ui-monospace,Consolas,monospace;background:#f1eeee;color:#201d1d;padding:28px 16px;line-height:1.5;}
-  .wrap{max-width:820px;margin:0 auto;background:#fdfcfc;border:1.5px solid #e2dede;border-radius:14px;overflow:hidden;box-shadow:0 12px 40px rgba(0,0,0,0.08);}
-  .head{display:flex;align-items:center;gap:14px;padding:22px 24px;background:#201d1d;color:#fdfcfc;}
-  .head img{width:42px;height:42px;object-fit:contain;}
-  .head h1{font-size:18px;font-weight:800;letter-spacing:.02em;}
-  .head p{font-size:12px;color:#c9c4d8;margin-top:2px;}
-  .meta{display:flex;flex-wrap:wrap;gap:10px 24px;padding:16px 24px;border-bottom:1px solid #eee;font-size:12px;color:#6e6e73;}
-  .meta b{color:#201d1d;}
-  table{width:100%;border-collapse:collapse;}
-  th,td{text-align:left;padding:11px 14px;font-size:12px;border-bottom:1px solid #efe9e9;vertical-align:top;}
-  th{font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:#8a8585;background:#faf7f7;}
-  td.num{color:#a8a2a2;width:34px;}
-  .company{display:block;font-weight:700;font-size:13px;}
-  .role{display:block;color:#6e6e73;font-size:11px;margin-top:2px;}
-  .badge{display:inline-block;padding:3px 9px;border-radius:999px;border:1px solid;font-size:11px;font-weight:700;}
-  .foot{padding:16px 24px;font-size:11px;color:#8a8585;text-align:center;border-top:1px solid #eee;}
-  @media print{body{background:#fff;padding:0;}.wrap{border:none;box-shadow:none;}}
-</style></head>
-<body><div class="wrap">
-  <div class="head">
-    <img src="https://job-seen.vercel.app/logo/android-chrome-192x192.png" alt="JobSeen" onerror="this.style.display='none'" />
-    <div><h1>Brute Force — Daily Call Report</h1><p>JobSeen by Arigato Labs</p></div>
-  </div>
-  <div class="meta">
-    <span><b>Date:</b> ${escapeHtml(dateLabel)}</span>
-    <span><b>Prepared by:</b> @${escapeHtml(username)}</span>
-    <span><b>Total updated today:</b> ${leads.length}</span>
-  </div>
-  <table>
-    <thead><tr><th>#</th><th>Company / Role</th><th>Location</th><th>Phone</th><th>Status</th></tr></thead>
-    <tbody>${rows}</tbody>
-  </table>
-  <div class="foot">Generated ${escapeHtml(new Date().toLocaleString("en-IN"))} · Tip: browser me Ctrl+P → “Save as PDF”</div>
-</div></body></html>`;
-}
 
 interface LeadCardProps {
   lead: BruteForceJob;
@@ -465,7 +391,6 @@ export default function BruteForceJobsView() {
   const [bulkDeleteIds, setBulkDeleteIds] = useState<string[] | null>(null);
   const [bulkDeleting, setBulkDeleting] = useState(false);
   const [bulkDeleteError, setBulkDeleteError] = useState("");
-  const [reportBusy, setReportBusy] = useState(false);
   const [now, setNow] = useState(Date.now());
 
   const [scheduleId, setScheduleId] = useState<string | null>(null);
@@ -544,45 +469,6 @@ export default function BruteForceJobsView() {
       else visibleLeadIds.forEach(id => next.add(id));
       return next;
     });
-  }
-
-  async function downloadTodayReport() {
-    if (reportBusy) return;
-    const today = new Date();
-    // Aaj koi bhi activity: status/decision update, success, reschedule, ya create.
-    const todaysLeads = leads
-      .filter(lead =>
-        isSameDay(toMillis(lead.updatedAt), today)
-        || isSameDay(toMillis(lead.successAt), today)
-        || isSameDay(toMillis(lead.interviewRescheduledAt), today)
-        || isSameDay(toMillis(lead.createdAt), today)
-      )
-      .sort((a, b) => toMillis(b.updatedAt) - toMillis(a.updatedAt));
-
-    if (todaysLeads.length === 0) {
-      showToast("Aaj kisi card ki koi activity nahi hui.", "info");
-      return;
-    }
-
-    setReportBusy(true);
-    try {
-      // Chhota sa mast loading moment.
-      await new Promise(resolve => window.setTimeout(resolve, 900));
-      const html = buildTodayReportHtml(todaysLeads, auth.profile?.username ?? "user");
-      const blob = new Blob([html], { type: "text/html;charset=utf-8" });
-      const url = URL.createObjectURL(blob);
-      const stamp = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `BruteForce_Report_${stamp}.html`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(url);
-      showToast(`${todaysLeads.length} cards ka aaj ka report download ho gaya.`, "success");
-    } finally {
-      setReportBusy(false);
-    }
   }
 
   function openBulkDelete() {
@@ -865,19 +751,6 @@ export default function BruteForceJobsView() {
         .json-loader-percent { position: absolute; top: 57px; font-size: 9px; font-weight: 800; color: var(--mute); letter-spacing: 0.03em; }
         .json-progress-active { background: linear-gradient(90deg, #7c3aed, #0ea5e9, #22c55e, #7c3aed) !important; background-size: 200% 100% !important; animation: jsonProgressFlow 1.2s linear infinite; }
       `}</style>
-      {reportBusy && (
-        <div style={{ position: "fixed", inset: 0, zIndex: 2200, display: "flex", alignItems: "center", justifyContent: "center", padding: 20, background: "rgba(15,0,0,0.4)", backdropFilter: "blur(3px)" }}>
-          <div role="dialog" aria-modal="true" aria-live="polite" style={{ width: "min(360px, 100%)", border: "1px solid var(--hairline-strong)", borderRadius: 14, padding: 28, background: "var(--canvas)", boxShadow: "0 18px 60px rgba(15,0,0,0.24)", textAlign: "center", animation: "jsonModalIn 180ms ease-out" }}>
-            <div className="json-import-loader" aria-hidden="true" style={{ margin: "0 auto 6px" }}>
-              <span className="json-loader-orbit json-loader-orbit-a" />
-              <span className="json-loader-orbit json-loader-orbit-b" />
-              <span className="json-loader-core" />
-            </div>
-            <h2 style={{ margin: "14px 0 4px", fontSize: 16, color: "var(--ink)" }}>Building today's report</h2>
-            <p style={{ margin: 0, fontSize: 12, color: "var(--mute)", lineHeight: 1.5 }}>Aaj ki activity collect ho rahi hai…</p>
-          </div>
-        </div>
-      )}
       {importProgress && (
         <div
           style={{
@@ -963,17 +836,10 @@ export default function BruteForceJobsView() {
         </div>
       )}
       <div className="page-header">
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, flexWrap: "wrap" }}>
-          <div>
-            <h1 className="page-title">Brute Force Jobs</h1>
-            <p className="page-subtitle">
-              AI se company list nikalo, phone number pe call milao, aur yahan track karo — no response, wrong number, incoming not allowed, no vacancies, ya interview mil gaya.
-            </p>
-          </div>
-          <button type="button" className="btn btn-secondary btn-sm" onClick={downloadTodayReport} disabled={reportBusy} style={{ whiteSpace: "nowrap" }}>
-            {reportBusy ? "Preparing…" : "↓ Today's report"}
-          </button>
-        </div>
+        <h1 className="page-title">Brute Force Jobs</h1>
+        <p className="page-subtitle">
+          AI se company list nikalo, phone number pe call milao, aur yahan track karo — no response, wrong number, incoming not allowed, no vacancies, ya interview mil gaya.
+        </p>
       </div>
 
       <div style={{ marginBottom: 26 }}>

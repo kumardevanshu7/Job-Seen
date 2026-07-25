@@ -1,4 +1,15 @@
-import type { JobCard, JobStatus } from "./firestore";
+import type { JobCard, JobStatus, BruteForceJob, BruteForceCallOutcome, BruteForceDecision } from "./firestore";
+
+const BRUTE_STATUS_META: Record<string, { label: string; color: string; bg: string; border: string }> = {
+  not_called:            { label: "Not called",            color: "#57534e", bg: "#f5f5f4", border: "#d6d3d1" },
+  no_response:           { label: "No response",           color: "#6d28d9", bg: "#f5f3ff", border: "#ddd6fe" },
+  wrong_number:          { label: "Wrong number",          color: "#be123c", bg: "#fff1f2", border: "#fecdd3" },
+  incoming_not_allowed:  { label: "Incoming not allowed",  color: "#0369a1", bg: "#f0f9ff", border: "#bae6fd" },
+  no_vacancies:          { label: "No vacancies",          color: "#b45309", bg: "#fffbeb", border: "#fde68a" },
+  success:               { label: "Interview scheduled",   color: "#15803d", bg: "#f0fdf4", border: "#bbf7d0" },
+  selected:              { label: "Selected",              color: "#1d4ed8", bg: "#eff6ff", border: "#bfdbfe" },
+  rejected:              { label: "Rejected",              color: "#b91c1c", bg: "#fef2f2", border: "#fecaca" },
+};
 
 const STATUS_META: Record<JobStatus, { label: string; color: string; bg: string; border: string }> = {
   pending:        { label: "Not Applied",   color: "#c0392b", bg: "#fff5f5", border: "#f5c6c6" },
@@ -34,41 +45,69 @@ function esc(value: string): string {
     .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
 }
 
-/** Jobs with any activity today: created, applied, or status changed today. */
+/** Jobs whose status was changed today. */
 export function jobsWithTodayActivity(jobs: JobCard[], today = new Date()): JobCard[] {
   return jobs
     .filter(job => (job.jobType ?? "online") !== "walkin")
-    .filter(job =>
-      isSameDay(millisOf(job.statusUpdatedAt), today)
-      || isSameDay(millisOf(job.appliedAt), today)
-      || isSameDay(millisOf(job.createdAt), today)
+    .filter(job => isSameDay(millisOf(job.statusUpdatedAt), today))
+    .sort((a, b) => millisOf(b.statusUpdatedAt) - millisOf(a.statusUpdatedAt));
+}
+
+/** Brute Force leads whose status changed today (not freshly created, not-yet-called). */
+export function bruteLeadsWithTodayActivity(leads: BruteForceJob[], today = new Date()): BruteForceJob[] {
+  return leads
+    .filter(lead =>
+      isSameDay(millisOf(lead.updatedAt), today)
+      && (lead.callOutcome !== "not_called" || lead.decision !== "pending")
     )
-    .sort((a, b) => {
-      const at = Math.max(millisOf(a.statusUpdatedAt), millisOf(a.appliedAt), millisOf(a.createdAt));
-      const bt = Math.max(millisOf(b.statusUpdatedAt), millisOf(b.appliedAt), millisOf(b.createdAt));
-      return bt - at;
-    });
+    .sort((a, b) => millisOf(b.updatedAt) - millisOf(a.updatedAt));
 }
 
-function activityLabel(job: JobCard, today: Date): string {
-  if (isSameDay(millisOf(job.statusUpdatedAt), today)) return "Status changed";
-  if (isSameDay(millisOf(job.appliedAt), today)) return "Applied";
-  if (isSameDay(millisOf(job.createdAt), today)) return "Added";
-  return "Updated";
+function bruteStatusMeta(lead: BruteForceJob) {
+  const key = (lead.decision as BruteForceDecision) !== "pending"
+    ? (lead.decision as string)
+    : (lead.callOutcome as BruteForceCallOutcome as string);
+  return BRUTE_STATUS_META[key] ?? BRUTE_STATUS_META.not_called;
 }
 
-export function buildDailyJobReportHtml(jobs: JobCard[], username: string, today = new Date()): string {
+export function buildDailyJobReportHtml(
+  jobs: JobCard[],
+  username: string,
+  today = new Date(),
+  bruteLeads: BruteForceJob[] = []
+): string {
   const dateLabel = today.toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+  const total = jobs.length + bruteLeads.length;
   const rows = jobs.map((job, index) => {
     const meta = STATUS_META[(job.status ?? "pending") as JobStatus] ?? STATUS_META.pending;
     return `<tr>
-      <td class="num">${index + 1}</td>
-      <td><span class="company">${esc(job.company || "—")}</span><span class="role">${esc(job.role || "")}</span></td>
-      <td>${esc(job.location || "—")}</td>
-      <td><span class="act">${esc(activityLabel(job, today))}</span></td>
-      <td><span class="badge" style="color:${meta.color};background:${meta.bg};border-color:${meta.border}">${esc(meta.label)}</span></td>
+      <td class="num" data-label="#">${index + 1}</td>
+      <td data-label="Company"><span class="company">${esc(job.company || "—")}</span><span class="role">${esc(job.role || "")}</span></td>
+      <td data-label="Location">${esc(job.location || "—")}</td>
+      <td data-label="Activity"><span class="act">Status changed</span></td>
+      <td data-label="Status"><span class="badge" style="color:${meta.color};background:${meta.bg};border-color:${meta.border}">${esc(meta.label)}</span></td>
     </tr>`;
   }).join("");
+
+  const bruteRows = bruteLeads.map((lead, index) => {
+    const meta = bruteStatusMeta(lead);
+    return `<tr>
+      <td class="num" data-label="#">${index + 1}</td>
+      <td data-label="Company"><span class="company">${esc(lead.company || "—")}</span><span class="role">${esc(lead.role || "")}</span></td>
+      <td data-label="Location">${esc(lead.location || "—")}</td>
+      <td data-label="Phone"><span class="act">${esc(lead.phone || "—")}</span></td>
+      <td data-label="Status"><span class="badge" style="color:${meta.color};background:${meta.bg};border-color:${meta.border}">${esc(meta.label)}</span></td>
+    </tr>`;
+  }).join("");
+
+  const jobsSection = jobs.length
+    ? `<div class="sec">Applied / Inbox jobs (${jobs.length})</div>
+       <table><thead><tr><th>#</th><th>Company / Role</th><th>Location</th><th>Activity</th><th>Status</th></tr></thead><tbody>${rows}</tbody></table>`
+    : "";
+  const bruteSection = bruteLeads.length
+    ? `<div class="sec">Brute Force calls (${bruteLeads.length})</div>
+       <table><thead><tr><th>#</th><th>Company / Role</th><th>Location</th><th>Phone</th><th>Status</th></tr></thead><tbody>${bruteRows}</tbody></table>`
+    : "";
 
   return `<!DOCTYPE html>
 <html lang="en"><head><meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -87,12 +126,30 @@ export function buildDailyJobReportHtml(jobs: JobCard[], username: string, today
   th,td{text-align:left;padding:11px 14px;font-size:12px;border-bottom:1px solid #efe9e9;vertical-align:top;}
   th{font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:#8a8585;background:#faf7f7;}
   td.num{color:#a8a2a2;width:34px;}
+  .sec{padding:16px 24px 8px;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:#7c3aed;}
   .company{display:block;font-weight:700;font-size:13px;}
   .role{display:block;color:#6e6e73;font-size:11px;margin-top:2px;}
   .act{font-size:11px;color:#6e6e73;}
   .badge{display:inline-block;padding:3px 9px;border-radius:999px;border:1px solid;font-size:11px;font-weight:700;}
   .foot{padding:16px 24px;font-size:11px;color:#8a8585;text-align:center;border-top:1px solid #eee;}
   @media print{body{background:#fff;padding:0;}.wrap{border:none;box-shadow:none;}}
+  @media (max-width:600px){
+    body{padding:14px 10px;}
+    .wrap{border-radius:12px;}
+    .head{padding:18px 16px;gap:11px;}
+    .head img{width:34px;height:34px;}
+    .head h1{font-size:15px;}
+    .meta{padding:14px 16px;gap:7px 16px;}
+    .sec{padding:16px 16px 6px;}
+    table,thead,tbody,tr,td{display:block;width:100%;}
+    thead{position:absolute;left:-9999px;top:-9999px;}
+    tr{border:1px solid #efe9e9;border-radius:10px;margin:0 16px 12px;padding:6px 0;}
+    td{border:none;padding:7px 16px;display:flex;justify-content:space-between;gap:12px;align-items:flex-start;text-align:right;}
+    td::before{content:attr(data-label);font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;color:#8a8585;text-align:left;flex:0 0 auto;}
+    td.num{color:#a8a2a2;}
+    .company,.role{text-align:right;}
+    .foot{padding:14px 16px;}
+  }
 </style></head>
 <body><div class="wrap">
   <div class="head">
@@ -102,12 +159,10 @@ export function buildDailyJobReportHtml(jobs: JobCard[], username: string, today
   <div class="meta">
     <span><b>Date:</b> ${esc(dateLabel)}</span>
     <span><b>Prepared by:</b> @${esc(username)}</span>
-    <span><b>Today's activity:</b> ${jobs.length}</span>
+    <span><b>Today's activity:</b> ${total}</span>
   </div>
-  <table>
-    <thead><tr><th>#</th><th>Company / Role</th><th>Location</th><th>Activity</th><th>Status</th></tr></thead>
-    <tbody>${rows}</tbody>
-  </table>
+  ${jobsSection}
+  ${bruteSection}
   <div class="foot">Generated ${esc(new Date().toLocaleString("en-IN"))} · Tip: browser me Ctrl+P → “Save as PDF”</div>
 </div></body></html>`;
 }
