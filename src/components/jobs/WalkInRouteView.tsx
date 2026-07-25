@@ -329,8 +329,19 @@ export default function WalkInRouteView() {
             <div style={{ padding: "18px 18px 12px", borderBottom: "1px solid var(--hairline)" }}>
               <div style={{ fontWeight: 700, fontSize: 16, color: "var(--ink)" }}>Add to {dateLabel(selectedDate)} route</div>
               <div style={{ fontSize: 12, color: "var(--mute)", marginTop: 4 }}>
-                Jobs aur active Brute Force leads — select karke {dateLabel(selectedDate)} ke route mein daalo.
+                Jobs aur active Brute Force leads — select karke route mein daalo.
               </div>
+              <label style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 12, fontSize: 12, fontWeight: 700, color: "var(--ink)", fontFamily: "inherit" }}>
+                Route date
+                <input
+                  type="date"
+                  value={selectedDate}
+                  min={todayKey()}
+                  onChange={e => setSelectedDate(e.target.value || todayKey())}
+                  className="form-input"
+                  style={{ width: "auto", height: 34, fontSize: 12, fontFamily: "inherit", padding: "0 10px" }}
+                />
+              </label>
             </div>
             <div style={{ overflowY: "auto", padding: 12, flex: 1 }}>
               {allJobs.length === 0 && availableBruteLeads.length === 0 ? (
@@ -480,17 +491,6 @@ export default function WalkInRouteView() {
         >
           + Add to route
         </button>
-        <label style={{ display: "inline-flex", alignItems: "center", gap: 8, fontSize: 12, color: "var(--mute)", fontFamily: "inherit" }}>
-          Route date
-          <input
-            type="date"
-            value={selectedDate}
-            min={todayKey()}
-            onChange={e => setSelectedDate(e.target.value || todayKey())}
-            className="form-input"
-            style={{ width: "auto", height: 34, fontSize: 12, fontFamily: "inherit", padding: "0 10px" }}
-          />
-        </label>
       </div>
 
       <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 12, marginBottom: 12 }}>
