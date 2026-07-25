@@ -1,0 +1,7 @@
+---
+import AppLayout from "../../layouts/AppLayout.astro";
+import AnalyticsView from "../../components/analytics/AnalyticsView";
+---
+<AppLayout title="Analytics">
+  <AnalyticsView client:only="react" />
+</AppLayout>

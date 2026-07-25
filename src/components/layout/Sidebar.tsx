@@ -27,6 +27,7 @@ const primaryNav = [
 ];
 
 const secondaryNav = [
+  { href: "/analytics",            label: "Analytics",     icon: "▤" },
   { href: "/users",                label: "Users",         icon: "⊕" },
   { href: "/chat",                 label: "Messages",      icon: "◫", hasChatCount: true },
   { href: "/notifications",        label: "Notifications", icon: "○", hasCount: true },
@@ -206,6 +207,10 @@ export default function Sidebar() {
           <span className="mobile-nav-item-icon">◫</span>
           <span>Messages</span>
           {unreadChat > 0 && <span className="mobile-nav-badge">{unreadChat}</span>}
+        </a>
+        <a href="/analytics" className={`mobile-nav-item ${path === "/analytics" ? "active" : ""}`} onClick={() => setPath("/analytics")}>
+          <span className="mobile-nav-item-icon">▤</span>
+          <span>Stats</span>
         </a>
         <a href="/users" className={`mobile-nav-item ${path === "/users" ? "active" : ""}`} onClick={() => setPath("/users")}>
           <span className="mobile-nav-item-icon">⊕</span>
