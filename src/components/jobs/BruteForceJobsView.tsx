@@ -35,33 +35,40 @@ type StatusMeta = {
   color: string;
   bg: string;
   border: string;
+  dot?: string; // optional gradient/solid override for the status dot
 };
 
 const STATUS_STYLES: Record<DisplayStatus, StatusMeta> = {
-  not_called: { label: "Not called", color: "#64748b", bg: "#f8fafc", border: "#cbd5e1" },
+  not_called: { label: "Not called", color: "#4b5563", bg: "#f3f4f6", border: "#d1d5db" },
   no_response: { label: "Ringing but no response", color: "#7c3aed", bg: "#f5f3ff", border: "#ddd6fe" },
-  wrong_number: { label: "Wrong number", color: "#db2777", bg: "#fdf2f8", border: "#fbcfe8" },
-  incoming_not_allowed: { label: "Incoming not allowed", color: "#0d9488", bg: "#f0fdfa", border: "#99f6e4" },
-  no_vacancies: { label: "Call picked but no vacancies there", color: "#ea580c", bg: "#fff7ed", border: "#fed7aa" },
+  wrong_number: { label: "Wrong number", color: "#dc2626", bg: "#fef2f2", border: "#fecaca" },
+  incoming_not_allowed: { label: "Incoming not allowed", color: "#9f1239", bg: "#fff1f2", border: "#fda4af" },
+  no_vacancies: {
+    label: "Call picked but no vacancies there",
+    color: "#7c2d12",
+    bg: "linear-gradient(90deg, #dcfce7 0%, #fee2e2 100%)",
+    border: "#fbcfe8",
+    dot: "linear-gradient(90deg, #16a34a 0%, #dc2626 100%)",
+  },
   resume_sent: { label: "Resume sent (hold)", color: "#ca8a04", bg: "#fefce8", border: "#fde68a" },
   success: { label: "Success — interview scheduled", color: "#16a34a", bg: "#f0fdf4", border: "#bbf7d0" },
   selected: { label: "Selected", color: "#2563eb", bg: "#eff6ff", border: "#bfdbfe" },
-  rejected: { label: "Rejected", color: "#dc2626", bg: "#fef2f2", border: "#fecaca" },
+  rejected: { label: "Rejected", color: "#7f1d1d", bg: "#fef2f2", border: "#fca5a5" },
 };
 
 // Why each color: neutral slate = not attempted; violet = ringing/waiting;
 // pink = wrong contact; teal = channel blocked; orange = dead-end (no vacancy);
 // amber/gold = on hold; green = positive progress; blue = final win; red = closed/lost.
 const STATUS_REASON: Record<DisplayStatus, string> = {
-  not_called: "Slate/neutral — abhi call nahi kiya",
-  no_response: "Violet — ghanti gayi par response nahi (waiting)",
-  wrong_number: "Pink — galat number, contact useless",
-  incoming_not_allowed: "Teal — incoming band, channel blocked",
-  no_vacancies: "Orange — call laga par vacancy nahi (dead-end)",
-  resume_sent: "Gold/amber — resume bheja, hold pe",
-  success: "Green — positive, interview scheduled",
-  selected: "Blue — final win, selected",
-  rejected: "Red — closed/lost",
+  not_called: "Grey — abhi call nahi kiya",
+  no_response: "Purple — ghanti gayi par response nahi",
+  wrong_number: "Red — galat number",
+  incoming_not_allowed: "Dark crimson — incoming band",
+  no_vacancies: "Green + red — call laga (green) par vacancy nahi (red)",
+  resume_sent: "Yellow — resume bheja, hold pe",
+  success: "Green — interview scheduled",
+  selected: "Blue — selected",
+  rejected: "Darkest red — rejected",
 };
 
 const OUTCOME_VALUES: BruteForceCallOutcome[] = [
@@ -278,7 +285,7 @@ function LeadCard(props: LeadCardProps) {
                   {!isLast && (
                     <span style={{ position: "absolute", left: 6, top: 15, bottom: -1, width: 2, background: "var(--hairline-strong)" }} aria-hidden="true" />
                   )}
-                  <span style={{ width: 14, height: 14, borderRadius: "50%", background: meta.color, border: `2px solid ${meta.bg}`, boxShadow: `0 0 0 1px ${meta.border}`, flexShrink: 0, marginTop: 1, zIndex: 1 }} aria-hidden="true" />
+                  <span style={{ width: 14, height: 14, borderRadius: "50%", background: meta.dot ?? meta.color, border: "2px solid var(--canvas)", boxShadow: `0 0 0 1px ${meta.border}`, flexShrink: 0, marginTop: 1, zIndex: 1 }} aria-hidden="true" />
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: 12, fontWeight: 700, color: meta.color }}>{meta.label}</div>
                     <div style={{ fontSize: 10, color: "var(--mute)", marginTop: 1 }}>{formatDateTime(entry.at)}</div>
@@ -907,7 +914,7 @@ export default function BruteForceJobsView() {
               >
                 <span
                   aria-hidden="true"
-                  style={{ width: 7, height: 7, borderRadius: "50%", background: item.color, flexShrink: 0 }}
+                  style={{ width: 8, height: 8, borderRadius: "50%", background: item.dot ?? item.color, flexShrink: 0 }}
                 />
                 <span title={STATUS_REASON[statusKey]}>{item.label}</span>
               </span>
