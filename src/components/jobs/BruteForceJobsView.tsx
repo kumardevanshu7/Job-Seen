@@ -38,15 +38,30 @@ type StatusMeta = {
 };
 
 const STATUS_STYLES: Record<DisplayStatus, StatusMeta> = {
-  not_called: { label: "Not called", color: "#57534e", bg: "#f5f5f4", border: "#d6d3d1" },
-  no_response: { label: "Ringing but no response", color: "#6d28d9", bg: "#f5f3ff", border: "#ddd6fe" },
-  wrong_number: { label: "Wrong number", color: "#be123c", bg: "#fff1f2", border: "#fecdd3" },
-  incoming_not_allowed: { label: "Incoming not allowed", color: "#0369a1", bg: "#f0f9ff", border: "#bae6fd" },
-  no_vacancies: { label: "Call picked but no vacancies there", color: "#b45309", bg: "#fffbeb", border: "#fde68a" },
-  resume_sent: { label: "Resume sent (hold)", color: "#a16207", bg: "#fefce8", border: "#fde047" },
-  success: { label: "Success — interview scheduled", color: "#15803d", bg: "#f0fdf4", border: "#bbf7d0" },
-  selected: { label: "Selected", color: "#1d4ed8", bg: "#eff6ff", border: "#bfdbfe" },
-  rejected: { label: "Rejected", color: "#b91c1c", bg: "#fef2f2", border: "#fecaca" },
+  not_called: { label: "Not called", color: "#64748b", bg: "#f8fafc", border: "#cbd5e1" },
+  no_response: { label: "Ringing but no response", color: "#7c3aed", bg: "#f5f3ff", border: "#ddd6fe" },
+  wrong_number: { label: "Wrong number", color: "#db2777", bg: "#fdf2f8", border: "#fbcfe8" },
+  incoming_not_allowed: { label: "Incoming not allowed", color: "#0d9488", bg: "#f0fdfa", border: "#99f6e4" },
+  no_vacancies: { label: "Call picked but no vacancies there", color: "#ea580c", bg: "#fff7ed", border: "#fed7aa" },
+  resume_sent: { label: "Resume sent (hold)", color: "#ca8a04", bg: "#fefce8", border: "#fde68a" },
+  success: { label: "Success — interview scheduled", color: "#16a34a", bg: "#f0fdf4", border: "#bbf7d0" },
+  selected: { label: "Selected", color: "#2563eb", bg: "#eff6ff", border: "#bfdbfe" },
+  rejected: { label: "Rejected", color: "#dc2626", bg: "#fef2f2", border: "#fecaca" },
+};
+
+// Why each color: neutral slate = not attempted; violet = ringing/waiting;
+// pink = wrong contact; teal = channel blocked; orange = dead-end (no vacancy);
+// amber/gold = on hold; green = positive progress; blue = final win; red = closed/lost.
+const STATUS_REASON: Record<DisplayStatus, string> = {
+  not_called: "Slate/neutral — abhi call nahi kiya",
+  no_response: "Violet — ghanti gayi par response nahi (waiting)",
+  wrong_number: "Pink — galat number, contact useless",
+  incoming_not_allowed: "Teal — incoming band, channel blocked",
+  no_vacancies: "Orange — call laga par vacancy nahi (dead-end)",
+  resume_sent: "Gold/amber — resume bheja, hold pe",
+  success: "Green — positive, interview scheduled",
+  selected: "Blue — final win, selected",
+  rejected: "Red — closed/lost",
 };
 
 const OUTCOME_VALUES: BruteForceCallOutcome[] = [
@@ -894,7 +909,7 @@ export default function BruteForceJobsView() {
                   aria-hidden="true"
                   style={{ width: 7, height: 7, borderRadius: "50%", background: item.color, flexShrink: 0 }}
                 />
-                {item.label}
+                <span title={STATUS_REASON[statusKey]}>{item.label}</span>
               </span>
             );
           })}
