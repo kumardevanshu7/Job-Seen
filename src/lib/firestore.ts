@@ -113,6 +113,7 @@ export type BruteForceCallOutcome =
   | "wrong_number"
   | "incoming_not_allowed"
   | "no_vacancies"
+  | "not_connected"
   | "resume_sent"
   | "success";
 

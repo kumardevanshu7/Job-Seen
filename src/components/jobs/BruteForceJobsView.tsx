@@ -50,6 +50,7 @@ const STATUS_STYLES: Record<DisplayStatus, StatusMeta> = {
     border: "#fbcfe8",
     dot: "linear-gradient(90deg, #16a34a 0%, #dc2626 100%)",
   },
+  not_connected: { label: "Not Connected - Try Again", color: "#ea580c", bg: "#fff7ed", border: "#fed7aa" },
   resume_sent: { label: "Resume sent (hold)", color: "#ca8a04", bg: "#fefce8", border: "#fde68a" },
   success: { label: "Success — interview scheduled", color: "#16a34a", bg: "#f0fdf4", border: "#bbf7d0" },
   selected: { label: "Selected", color: "#2563eb", bg: "#eff6ff", border: "#bfdbfe" },
@@ -65,6 +66,7 @@ const STATUS_REASON: Record<DisplayStatus, string> = {
   wrong_number: "Red — galat number",
   incoming_not_allowed: "Dark crimson — incoming band",
   no_vacancies: "Green + red — call laga (green) par vacancy nahi (red)",
+  not_connected: "Orange — call connect nahi hua, dobara try karo",
   resume_sent: "Yellow — resume bheja, hold pe",
   success: "Green — interview scheduled",
   selected: "Blue — selected",
@@ -72,11 +74,11 @@ const STATUS_REASON: Record<DisplayStatus, string> = {
 };
 
 const OUTCOME_VALUES: BruteForceCallOutcome[] = [
-  "not_called", "no_response", "wrong_number", "incoming_not_allowed", "no_vacancies", "resume_sent", "success",
+  "not_called", "no_response", "wrong_number", "incoming_not_allowed", "no_vacancies", "not_connected", "resume_sent", "success",
 ];
 const OUTCOMES = OUTCOME_VALUES.map(value => ({ value, ...STATUS_STYLES[value] }));
 const STATUS_LEGEND: DisplayStatus[] = [
-  "not_called", "no_response", "wrong_number", "incoming_not_allowed", "no_vacancies", "resume_sent", "success", "selected", "rejected",
+  "not_called", "no_response", "wrong_number", "incoming_not_allowed", "no_vacancies", "not_connected", "resume_sent", "success", "selected", "rejected",
 ];
 
 const INITIAL_FORM = { company: "", phone: "", location: "", mapLink: "", role: "" };
