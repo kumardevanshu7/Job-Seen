@@ -96,8 +96,14 @@ export interface BruteForceJob {
   interviewMode: InterviewMode | null;
   interviewAt: any | null;
   interviewRescheduledAt: any | null;
+  statusHistory?: BruteForceStatusEntry[];
   createdAt: any;
   updatedAt: any;
+}
+
+export interface BruteForceStatusEntry {
+  status: string; // callOutcome value or a final decision
+  at: number;     // client epoch ms (serverTimestamp not allowed inside arrays)
 }
 
 export type BruteForceCallOutcome =
@@ -106,6 +112,7 @@ export type BruteForceCallOutcome =
   | "wrong_number"
   | "incoming_not_allowed"
   | "no_vacancies"
+  | "resume_sent"
   | "success";
 
 export type InterviewMode = "offline" | "online";
@@ -295,9 +302,15 @@ function buildBruteForceJobPayload(
     interviewMode: null,
     interviewAt: null,
     interviewRescheduledAt: null,
+    statusHistory: [{ status: "not_called", at: Date.now() }],
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   };
+}
+
+function appendStatusHistory(current: any, status: string): BruteForceStatusEntry[] {
+  const previous: BruteForceStatusEntry[] = Array.isArray(current?.statusHistory) ? current.statusHistory : [];
+  return [...previous, { status, at: Date.now() }].slice(-100);
 }
 
 export async function createBruteForceJob(
@@ -411,6 +424,7 @@ export async function recordBruteForceCallOutcome(
         interviewMode: interview.mode,
         interviewAt: interview.at,
         interviewRescheduledAt: null,
+        statusHistory: appendStatusHistory(current, outcome),
         updatedAt: serverTimestamp(),
       });
       return;
@@ -422,6 +436,7 @@ export async function recordBruteForceCallOutcome(
       interviewMode: null,
       interviewAt: null,
       interviewRescheduledAt: null,
+      statusHistory: appendStatusHistory(current, outcome),
       updatedAt: serverTimestamp(),
     });
   });
@@ -468,7 +483,11 @@ export async function setBruteForceDecision(
     if (!interviewMillis || Date.now() < interviewMillis) {
       throw new Error("Final result unlocks after the scheduled interview time.");
     }
-    transaction.update(jobRef, { decision, updatedAt: serverTimestamp() });
+    transaction.update(jobRef, {
+      decision,
+      statusHistory: appendStatusHistory(current, decision),
+      updatedAt: serverTimestamp(),
+    });
   });
 }
 

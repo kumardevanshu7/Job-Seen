@@ -174,8 +174,9 @@ service cloud.firestore {
         && data.keys().hasOnly([
           'ownerUID', 'ownerUsername', 'company', 'phone', 'location', 'mapLink',
           'role', 'callOutcome', 'decision', 'successAt', 'interviewMode',
-          'interviewAt', 'interviewRescheduledAt', 'createdAt', 'updatedAt'
+          'interviewAt', 'interviewRescheduledAt', 'statusHistory', 'createdAt', 'updatedAt'
         ])
+        && (!('statusHistory' in data) || (data.statusHistory is list && data.statusHistory.size() <= 100))
         && data.ownerUID is string
         && validUsername(data.ownerUsername)
         && data.company is string && data.company.size() >= 1 && data.company.size() <= 200
@@ -183,7 +184,7 @@ service cloud.firestore {
         && data.location is string && data.location.size() >= 1 && data.location.size() <= 300
         && data.mapLink is string && data.mapLink.matches('^https://.*')
         && data.role is string && data.role.size() >= 1 && data.role.size() <= 200
-        && data.callOutcome in ['not_called', 'no_response', 'wrong_number', 'incoming_not_allowed', 'no_vacancies', 'success']
+        && data.callOutcome in ['not_called', 'no_response', 'wrong_number', 'incoming_not_allowed', 'no_vacancies', 'resume_sent', 'success']
         && data.decision in ['pending', 'selected', 'rejected']
         && (data.successAt == null || data.successAt is timestamp)
         && (data.interviewMode == null || data.interviewMode in ['offline', 'online'])
@@ -465,7 +466,7 @@ service cloud.firestore {
             && request.resource.data.decision == 'pending'
             && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
               'callOutcome', 'successAt', 'interviewMode', 'interviewAt',
-              'interviewRescheduledAt', 'updatedAt'
+              'interviewRescheduledAt', 'statusHistory', 'updatedAt'
             ])
             && (
               (request.resource.data.callOutcome == 'success'
@@ -499,7 +500,7 @@ service cloud.firestore {
             && request.resource.data.callOutcome == 'success'
             && request.resource.data.decision in ['selected', 'rejected']
             && request.time >= resource.data.interviewAt
-            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['decision', 'updatedAt'])
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['decision', 'statusHistory', 'updatedAt'])
           )
         );
       allow delete: if admin() || (

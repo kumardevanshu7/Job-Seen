@@ -2,10 +2,11 @@ import type { JobCard, JobStatus, BruteForceJob, BruteForceCallOutcome, BruteFor
 
 const BRUTE_STATUS_META: Record<string, { label: string; color: string; bg: string; border: string }> = {
   not_called:            { label: "Not called",            color: "#57534e", bg: "#f5f5f4", border: "#d6d3d1" },
-  no_response:           { label: "No response",           color: "#6d28d9", bg: "#f5f3ff", border: "#ddd6fe" },
+  no_response:           { label: "Ringing but no response", color: "#6d28d9", bg: "#f5f3ff", border: "#ddd6fe" },
   wrong_number:          { label: "Wrong number",          color: "#be123c", bg: "#fff1f2", border: "#fecdd3" },
   incoming_not_allowed:  { label: "Incoming not allowed",  color: "#0369a1", bg: "#f0f9ff", border: "#bae6fd" },
-  no_vacancies:          { label: "No vacancies",          color: "#b45309", bg: "#fffbeb", border: "#fde68a" },
+  no_vacancies:          { label: "Call picked but no vacancies there", color: "#b45309", bg: "#fffbeb", border: "#fde68a" },
+  resume_sent:           { label: "Resume sent (hold)",    color: "#a16207", bg: "#fefce8", border: "#fde047" },
   success:               { label: "Interview scheduled",   color: "#15803d", bg: "#f0fdf4", border: "#bbf7d0" },
   selected:              { label: "Selected",              color: "#1d4ed8", bg: "#eff6ff", border: "#bfdbfe" },
   rejected:              { label: "Rejected",              color: "#b91c1c", bg: "#fef2f2", border: "#fecaca" },

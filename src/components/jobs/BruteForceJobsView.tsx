@@ -39,21 +39,22 @@ type StatusMeta = {
 
 const STATUS_STYLES: Record<DisplayStatus, StatusMeta> = {
   not_called: { label: "Not called", color: "#57534e", bg: "#f5f5f4", border: "#d6d3d1" },
-  no_response: { label: "No response", color: "#6d28d9", bg: "#f5f3ff", border: "#ddd6fe" },
+  no_response: { label: "Ringing but no response", color: "#6d28d9", bg: "#f5f3ff", border: "#ddd6fe" },
   wrong_number: { label: "Wrong number", color: "#be123c", bg: "#fff1f2", border: "#fecdd3" },
   incoming_not_allowed: { label: "Incoming not allowed", color: "#0369a1", bg: "#f0f9ff", border: "#bae6fd" },
-  no_vacancies: { label: "No vacancies", color: "#b45309", bg: "#fffbeb", border: "#fde68a" },
+  no_vacancies: { label: "Call picked but no vacancies there", color: "#b45309", bg: "#fffbeb", border: "#fde68a" },
+  resume_sent: { label: "Resume sent (hold)", color: "#a16207", bg: "#fefce8", border: "#fde047" },
   success: { label: "Success — interview scheduled", color: "#15803d", bg: "#f0fdf4", border: "#bbf7d0" },
   selected: { label: "Selected", color: "#1d4ed8", bg: "#eff6ff", border: "#bfdbfe" },
   rejected: { label: "Rejected", color: "#b91c1c", bg: "#fef2f2", border: "#fecaca" },
 };
 
 const OUTCOME_VALUES: BruteForceCallOutcome[] = [
-  "not_called", "no_response", "wrong_number", "incoming_not_allowed", "no_vacancies", "success",
+  "not_called", "no_response", "wrong_number", "incoming_not_allowed", "no_vacancies", "resume_sent", "success",
 ];
 const OUTCOMES = OUTCOME_VALUES.map(value => ({ value, ...STATUS_STYLES[value] }));
 const STATUS_LEGEND: DisplayStatus[] = [
-  "not_called", "no_response", "wrong_number", "incoming_not_allowed", "no_vacancies", "success", "selected", "rejected",
+  "not_called", "no_response", "wrong_number", "incoming_not_allowed", "no_vacancies", "resume_sent", "success", "selected", "rejected",
 ];
 
 const INITIAL_FORM = { company: "", phone: "", location: "", mapLink: "", role: "" };
@@ -247,6 +248,32 @@ function LeadCard(props: LeadCardProps) {
           </button>
         )}
       </div>
+
+      {Array.isArray(lead.statusHistory) && lead.statusHistory.length > 0 && (
+        <div style={{ marginTop: 16, paddingLeft: 4 }}>
+          <div style={{ fontSize: 10, fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--mute)", marginBottom: 10 }}>
+            Status timeline
+          </div>
+          <div style={{ position: "relative" }}>
+            {lead.statusHistory.map((entry, idx) => {
+              const meta = STATUS_STYLES[entry.status as DisplayStatus] ?? STATUS_STYLES.not_called;
+              const isLast = idx === lead.statusHistory!.length - 1;
+              return (
+                <div key={idx} style={{ display: "flex", gap: 11, alignItems: "flex-start", position: "relative", paddingBottom: isLast ? 0 : 16 }}>
+                  {!isLast && (
+                    <span style={{ position: "absolute", left: 6, top: 15, bottom: -1, width: 2, background: "var(--hairline-strong)" }} aria-hidden="true" />
+                  )}
+                  <span style={{ width: 14, height: 14, borderRadius: "50%", background: meta.color, border: `2px solid ${meta.bg}`, boxShadow: `0 0 0 1px ${meta.border}`, flexShrink: 0, marginTop: 1, zIndex: 1 }} aria-hidden="true" />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: meta.color }}>{meta.label}</div>
+                    <div style={{ fontSize: 10, color: "var(--mute)", marginTop: 1 }}>{formatDateTime(entry.at)}</div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {!isFinal && lead.callOutcome !== "success" && (
         <div className="form-group" style={{ marginTop: 16 }}>
