@@ -3,11 +3,15 @@ import { useStore } from "@nanostores/react";
 import { $auth } from "../../stores/authStore";
 import {
   subscribeToUserJobs,
+  subscribeToBruteForceJobs,
+  addBruteForceJobToRoute,
+  bruteForceRouteJobId,
   updateJobStatus,
   updateJobRouteOrder,
   setJobOnRoute,
   type JobCard as JobCardType,
   type JobStatus,
+  type BruteForceJob,
 } from "../../lib/firestore";
 import { showToast, ToastProvider } from "../ui/Toast";
 import { deleteJobWithAnswer, deletionProtectionError } from "../../lib/deletionProtection";
@@ -55,6 +59,8 @@ export default function WalkInRouteView() {
   const [deleteBusy, setDeleteBusy] = useState(false);
   const [deleteError, setDeleteError] = useState("");
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [bruteLeads, setBruteLeads] = useState<BruteForceJob[]>([]);
+  const [addingId, setAddingId] = useState<string | null>(null);
 
   const itemRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const flipRef = useRef<{
@@ -78,7 +84,8 @@ export default function WalkInRouteView() {
       setAllJobs(data);
       setLoading(false);
     });
-    return unsub;
+    const unsubBrute = subscribeToBruteForceJobs(auth.user.uid, setBruteLeads);
+    return () => { unsub(); unsubBrute(); };
   }, [auth.user]);
 
   useLayoutEffect(() => {
@@ -178,9 +185,31 @@ export default function WalkInRouteView() {
     try {
       await setJobOnRoute(jobId, true, Date.now());
       showToast("Added to active route.", "success");
-      setPickerOpen(false);
     } catch {
       showToast("Couldn’t add to route.", "error");
+    }
+  }
+
+  // Active Brute Force leads not yet on the route.
+  const routeLeadIds = new Set(allJobs.map(j => j.id));
+  const availableBruteLeads = bruteLeads.filter(lead => {
+    if (lead.decision !== "pending") return false;
+    const routeId = auth.user ? bruteForceRouteJobId(auth.user.uid, lead.id) : "";
+    const job = allJobs.find(j => j.id === routeId);
+    return !job || !isActiveOnRoute(job);
+  });
+
+  async function addBruteLeadToRoute(lead: BruteForceJob) {
+    if (!auth.user || !auth.profile) { showToast("Not logged in.", "error"); return; }
+    setAddingId(lead.id);
+    try {
+      const routeId = bruteForceRouteJobId(auth.user.uid, lead.id);
+      await addBruteForceJobToRoute(lead, auth.user.uid, auth.profile.username, routeLeadIds.has(routeId));
+      showToast("Brute Force lead route mein add ho gaya.", "success");
+    } catch (err: any) {
+      showToast(err.message ?? "Couldn’t add lead to route.", "error");
+    } finally {
+      setAddingId(null);
     }
   }
 
@@ -279,11 +308,11 @@ export default function WalkInRouteView() {
               </div>
             </div>
             <div style={{ overflowY: "auto", padding: 12, flex: 1 }}>
-              {allJobs.length === 0 ? (
+              {allJobs.length === 0 && availableBruteLeads.length === 0 ? (
                 <div style={{ fontSize: 13, color: "var(--mute)", padding: 12 }}>
-                  Abhi koi job nahi hai. Pehle Add Job se online/walk-in banao.
+                  Abhi koi job/lead nahi hai. Pehle Add Job ya Brute Force se banao.
                 </div>
-              ) : (
+              ) : allJobs.length === 0 ? null : (
                 <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                   {allJobs
                     .slice()
@@ -353,6 +382,43 @@ export default function WalkInRouteView() {
                         </div>
                       );
                     })}
+                </div>
+              )}
+
+              {availableBruteLeads.length > 0 && (
+                <div style={{ marginTop: 16 }}>
+                  <div style={{ fontSize: 10, fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.05em", color: "#0369a1", marginBottom: 8 }}>
+                    Active Brute Force leads
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                    {availableBruteLeads.map(lead => (
+                      <div
+                        key={lead.id}
+                        style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 12px", border: "1.5px solid #bae6fd", borderRadius: 8, background: "#f0f9ff" }}
+                      >
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                            <span style={{ fontWeight: 700, fontSize: 13, color: "var(--ink)" }}>{lead.company || "Company"}</span>
+                            <span style={{ fontSize: 10, fontWeight: 700, color: "#0369a1", background: "#e0f2fe", border: "1px solid #bae6fd", padding: "1px 6px", borderRadius: 4 }}>
+                              brute force
+                            </span>
+                          </div>
+                          <div style={{ fontSize: 12, color: "var(--mute)", marginTop: 2 }}>
+                            {lead.role}{lead.location ? ` · ${lead.location}` : ""}
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          className="btn btn-primary btn-sm"
+                          disabled={addingId === lead.id}
+                          onClick={() => addBruteLeadToRoute(lead)}
+                          style={{ whiteSpace: "nowrap" }}
+                        >
+                          {addingId === lead.id ? "Adding…" : "+ Add"}
+                        </button>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
             </div>
