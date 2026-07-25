@@ -1,19 +1,18 @@
 import { useState, useEffect } from "react";
 import { signInWithGoogle } from "../../lib/auth";
 
-const JOBSEEN_ASCII = `      ___ _____ _____ _____ _____ _____ _____ 
-     | . |     | __  |   __|  ___|  ___|   | |
-     | | |  |  | __ -|__   |  ___|  ___| | | |
-     |___|_____|_____|_____|_____|_____|_|___|`;
+const FEATURES = [
+  { tag: "[1]", title: "Kanban & Grid Views", desc: "Applied se hired tak, pura pipeline ek nazar mein — board, columns ya list." },
+  { tag: "[2]", title: "Real-time Chat", desc: "Roles discuss karo, links share karo, peers ke saath instantly collaborate." },
+  { tag: "[3]", title: "Brute Force + Reminders", desc: "Company leads track karo, follow-up kabhi miss mat karo." },
+];
 
 export default function LoginView() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [mounted, setMounted] = useState(false);
 
-  useEffect(() => {
-    setMounted(true);
-  }, []);
+  useEffect(() => { setMounted(true); }, []);
 
   async function handleGoogleSignIn() {
     setLoading(true);
@@ -28,174 +27,143 @@ export default function LoginView() {
   }
 
   return (
-    <div style={{
-      minHeight: "100vh",
-      background: "var(--canvas)",
-      color: "var(--ink)",
-      fontFamily: "'JetBrains Mono', 'IBM Plex Mono', ui-monospace, monospace",
-      display: "flex",
-      flexDirection: "column",
-    }}>
-      {/* Top hairline nav */}
-      <div style={{
-        height: 56,
-        borderBottom: "1px solid var(--hairline)",
-        display: "flex",
-        alignItems: "center",
-        padding: "0 32px",
-        justifyContent: "space-between",
-        background: "var(--canvas)",
-      }}>
-        <span style={{
-          fontSize: 14,
-          fontWeight: 700,
-          letterSpacing: "0.08em",
-        }}>
-          JOBSEEN
+    <div className="landing-root">
+      <style>{`
+        .landing-root {
+          min-height: 100vh; min-height: 100dvh;
+          background: var(--canvas); color: var(--ink);
+          font-family: 'JetBrains Mono','IBM Plex Mono',ui-monospace,monospace;
+          display: flex; flex-direction: column;
+        }
+        .landing-nav {
+          height: 56px; border-bottom: 1px solid var(--hairline);
+          display: flex; align-items: center; justify-content: space-between;
+          padding: 0 clamp(16px, 5vw, 32px); background: var(--canvas);
+          position: sticky; top: 0; z-index: 10;
+        }
+        .landing-brand { display: flex; align-items: center; gap: 10px; }
+        .landing-brand img { width: 26px; height: 26px; border-radius: 7px; }
+        .landing-brand span { font-size: 14px; font-weight: 800; letter-spacing: 0.1em; }
+        .landing-nav-meta { font-size: 12px; color: var(--mute); }
+        .landing-hero {
+          flex: 1; display: flex; flex-direction: column; align-items: center;
+          justify-content: center; text-align: center;
+          padding: clamp(48px, 9vw, 88px) clamp(18px, 5vw, 24px);
+          background:
+            radial-gradient(90% 120% at 50% -10%, rgba(124,99,246,0.28), transparent 60%),
+            radial-gradient(70% 90% at 85% 15%, rgba(14,165,233,0.20), transparent 55%),
+            var(--ink);
+          color: var(--canvas); border-bottom: 1px solid var(--hairline);
+        }
+        .landing-pill {
+          display: inline-block; padding: 6px 16px;
+          border: 1px solid rgba(255,255,255,0.25); border-radius: 999px;
+          font-size: clamp(10px, 3vw, 12px); color: #e6e2ff;
+          margin-bottom: clamp(22px, 5vw, 34px); backdrop-filter: blur(4px);
+        }
+        .landing-logo-badge {
+          width: clamp(72px, 20vw, 104px); height: clamp(72px, 20vw, 104px);
+          border-radius: 24px; object-fit: contain; margin-bottom: 22px;
+          box-shadow: 0 18px 50px rgba(0,0,0,0.4);
+          animation: landingFloat 3.4s ease-in-out infinite;
+        }
+        .landing-title {
+          margin: 0 0 12px; font-weight: 800; letter-spacing: -0.02em;
+          font-size: clamp(34px, 10vw, 68px); line-height: 1.02;
+          background: linear-gradient(180deg, #ffffff, #c9c4ff);
+          -webkit-background-clip: text; background-clip: text; color: transparent;
+        }
+        .landing-sub {
+          margin: 0 auto clamp(30px, 6vw, 42px); max-width: 520px;
+          font-size: clamp(13px, 3.5vw, 15px); line-height: 1.6; color: #d8d4e8;
+        }
+        .landing-card {
+          background: var(--canvas); color: var(--ink);
+          border: 1px solid var(--hairline); border-radius: 16px;
+          padding: clamp(22px, 6vw, 32px); width: 100%; max-width: 420px;
+          box-shadow: 0 24px 70px rgba(0,0,0,0.28);
+        }
+        .landing-card h2 { margin: 0 0 8px; font-size: 16px; font-weight: 800; }
+        .landing-card p { margin: 0 0 22px; font-size: 13px; color: var(--mute); }
+        .landing-google {
+          width: 100%; padding: 14px; border-radius: 10px; border: none;
+          background: var(--ink); color: var(--canvas);
+          font-family: inherit; font-size: 14px; font-weight: 800;
+          display: flex; align-items: center; justify-content: center; gap: 10px;
+          cursor: pointer; transition: transform 0.1s, opacity 0.1s;
+        }
+        .landing-google:active { transform: scale(0.98); }
+        .landing-google:disabled { opacity: 0.75; cursor: not-allowed; }
+        .landing-features {
+          padding: clamp(48px, 9vw, 80px) clamp(18px, 5vw, 40px);
+          display: grid; gap: clamp(16px, 4vw, 28px);
+          grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+          max-width: 1120px; margin: 0 auto; width: 100%; background: var(--canvas);
+        }
+        .landing-feature {
+          border: 1px solid var(--hairline); border-radius: 14px;
+          padding: clamp(20px, 5vw, 30px); background: var(--surface-soft);
+          transition: transform 0.15s, border-color 0.15s, box-shadow 0.15s;
+        }
+        .landing-feature:hover { transform: translateY(-4px); border-color: #7c63f6; box-shadow: 0 14px 34px rgba(124,99,246,0.14); }
+        .landing-feature .ft { font-size: 12px; font-weight: 800; color: #7c63f6; }
+        .landing-feature h3 { font-size: 15px; font-weight: 800; margin: 8px 0 10px; }
+        .landing-feature p { font-size: 13px; color: var(--mute); line-height: 1.6; margin: 0; }
+        .landing-footer {
+          padding: 22px; text-align: center; border-top: 1px solid var(--hairline);
+          font-size: 12px; color: var(--mute);
+        }
+        .reveal { opacity: 0; }
+        .reveal.on { animation: fade-in-up 0.7s ease-out forwards; }
+        @keyframes landingFloat { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }
+        @media (max-width: 520px) { .landing-nav-meta { display: none; } }
+      `}</style>
+
+      <header className="landing-nav">
+        <span className="landing-brand">
+          <img src="/logo/android-chrome-192x192.png" alt="JobSeen" />
+          <span>JOBSEEN</span>
         </span>
-        <span style={{ fontSize: 13, color: "var(--mute)" }}>
-          job listing tracker [v1.0.0]
-        </span>
-      </div>
+        <span className="landing-nav-meta">job listing tracker [v1.0.0]</span>
+      </header>
 
-      {/* Hero Section - TUI Style */}
-      <main style={{
-        flex: 1,
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        justifyContent: "center",
-        padding: "80px 24px",
-        textAlign: "center",
-        background: "var(--ink)",
-        color: "var(--canvas)",
-        borderBottom: "1px solid var(--hairline)",
-      }}>
-        
-        <div style={{
-          display: "inline-block",
-          padding: "6px 16px",
-          border: "1px solid rgba(255,255,255,0.2)",
-          fontSize: 12,
-          color: "#e2dede",
-          marginBottom: 32,
-          animation: mounted ? "fade-in-up 0.6s ease-out" : "none",
-        }}>
-          $ ./jobseen --track --collaborate
-        </div>
+      <main className="landing-hero">
+        <span className={`landing-pill reveal ${mounted ? "on" : ""}`}>$ ./jobseen --track --collaborate</span>
+        <img
+          className={`landing-logo-badge reveal ${mounted ? "on" : ""}`}
+          src="/logo/android-chrome-512x512.png"
+          alt="JobSeen logo"
+        />
+        <h1 className={`landing-title reveal ${mounted ? "on" : ""}`} style={{ animationDelay: "0.05s" }}>JobSeen</h1>
+        <p className={`landing-sub reveal ${mounted ? "on" : ""}`} style={{ animationDelay: "0.1s" }}>
+          Track, organize, aur share job listings — apni puri job hunt ek jagah, apne connections ke saath.
+        </p>
 
-        <pre style={{
-          margin: "0 0 48px 0",
-          fontFamily: "'JetBrains Mono', 'IBM Plex Mono', ui-monospace, monospace",
-          fontSize: "clamp(9px, 1.4vw, 15px)",
-          lineHeight: 1.15,
-          fontWeight: 700,
-          color: "var(--canvas)",
-          textAlign: "center",
-          whiteSpace: "pre",
-          overflowX: "auto",
-          maxWidth: "100%",
-          animation: mounted ? "fade-in-up 0.8s ease-out 0.1s forwards" : "none",
-          opacity: 0
-        }}>
-          {JOBSEEN_ASCII}
-        </pre>
-
-        {/* Login Box */}
-        <div style={{
-          background: "var(--canvas)",
-          color: "var(--ink)",
-          border: "1px solid var(--hairline)",
-          padding: "32px",
-          width: "100%",
-          maxWidth: 400,
-          animation: mounted ? "fade-in-up 0.8s ease-out 0.3s forwards" : "none",
-          opacity: 0,
-        }}>
-          <h2 style={{ margin: "0 0 8px 0", fontSize: 16, fontWeight: 700 }}>[auth] sign in</h2>
-          <p style={{ margin: "0 0 24px 0", fontSize: 13, color: "var(--mute)" }}>
-            Securely access your job application pipeline.
-          </p>
-          
-          {error && <div style={{ color: "#c0392b", fontSize: 12, marginBottom: 16, background: "#fff5f5", padding: "8px 12px", border: "1px solid #f5c6c6" }}>{error}</div>}
-          
-          <button
-            onClick={handleGoogleSignIn}
-            disabled={loading}
-            style={{
-              width: "100%",
-              padding: "12px",
-              background: "var(--ink)",
-              color: "var(--canvas)",
-              border: "none",
-              fontSize: 14,
-              fontWeight: 700,
-              cursor: loading ? "not-allowed" : "pointer",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: 12,
-              transition: "transform 0.1s",
-              opacity: loading ? 0.8 : 1
-            }}
-            onMouseDown={(e) => {
-              if(!loading) e.currentTarget.style.transform = "scale(0.98)";
-            }}
-            onMouseUp={(e) => {
-              if(!loading) e.currentTarget.style.transform = "scale(1)";
-            }}
-            onMouseLeave={(e) => {
-              if(!loading) e.currentTarget.style.transform = "scale(1)";
-            }}
-          >
-            {loading ? (
-              <span className="spinner"></span>
-            ) : (
-              <span>[+] continue with google</span>
-            )}
+        <div className={`landing-card reveal ${mounted ? "on" : ""}`} style={{ animationDelay: "0.2s" }}>
+          <h2>[auth] sign in</h2>
+          <p>Securely access your job application pipeline.</p>
+          {error && (
+            <div style={{ color: "#c0392b", fontSize: 12, marginBottom: 16, background: "#fff5f5", padding: "8px 12px", border: "1px solid #f5c6c6", borderRadius: 8 }}>
+              {error}
+            </div>
+          )}
+          <button className="landing-google" onClick={handleGoogleSignIn} disabled={loading}>
+            {loading ? <span className="spinner" /> : <span>[+] continue with google</span>}
           </button>
         </div>
       </main>
 
-      {/* Features Grid - TUI Style */}
-      <section style={{
-        padding: "80px 40px",
-        display: "grid",
-        gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
-        gap: 32,
-        maxWidth: 1200,
-        margin: "0 auto",
-        width: "100%",
-        animation: mounted ? "fade-in-up 0.8s ease-out 0.5s forwards" : "none",
-        opacity: 0,
-        background: "var(--canvas)",
-      }}>
-        {[
-          { title: "[1] Kanban & Grid Views", desc: "Visualize your pipeline perfectly. From applied to hired, see exactly where you stand." },
-          { title: "[2] Real-time Chat", desc: "Discuss roles, share links, and collaborate with your peers instantly in the app." },
-          { title: "[3] Smart Reminders", desc: "Never miss a follow-up. Keep track of aging applications and respond on time." }
-        ].map((feature, i) => (
-          <div key={i} style={{
-            border: "1px dashed var(--mute)",
-            padding: 32,
-            background: "var(--surface-soft)",
-          }}>
-            <h3 style={{ fontSize: 15, fontWeight: 700, marginBottom: 12 }}>{feature.title}</h3>
-            <p style={{ fontSize: 13, color: "var(--mute)", lineHeight: 1.6 }}>{feature.desc}</p>
+      <section className="landing-features">
+        {FEATURES.map((f, i) => (
+          <div key={i} className={`landing-feature reveal ${mounted ? "on" : ""}`} style={{ animationDelay: `${0.35 + i * 0.1}s` }}>
+            <span className="ft">{f.tag}</span>
+            <h3>{f.title}</h3>
+            <p>{f.desc}</p>
           </div>
         ))}
       </section>
-      
-      {/* Footer */}
-      <footer style={{
-        padding: "24px",
-        textAlign: "center",
-        borderTop: "1px solid var(--hairline)",
-        fontSize: 12,
-        color: "var(--mute)",
-      }}>
-        [EOF] © {new Date().getFullYear()} JobSeen
-      </footer>
+
+      <footer className="landing-footer">[EOF] © {new Date().getFullYear()} JobSeen · Arigato Labs</footer>
     </div>
   );
 }
