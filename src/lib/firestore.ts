@@ -449,6 +449,50 @@ export async function recordBruteForceCallOutcome(
   });
 }
 
+export type BruteForceEditableFields = {
+  company: string;
+  phone: string;
+  location: string;
+  mapLink: string;
+  role: string;
+};
+
+/** Field edit gated by One Password (same-batch proof `bruteForceJobs__{id}_edit`). */
+export async function updateBruteForceJobWithAnswer(
+  uid: string,
+  leadId: string,
+  answer: string,
+  fields: BruteForceEditableFields
+): Promise<void> {
+  const { getDeletionQuestion, digestDeletionAnswer } = await import("./deletionProtection");
+  const question = await getDeletionQuestion(uid);
+  if (!question) throw new Error("NO_DELETION_QUESTION");
+  const answerDigest = await digestDeletionAnswer(answer);
+  const mapLink = requireSafeExternalUrl(fields.mapLink, "Map link");
+  const kind = "bruteForceJobs";
+  const targetId = `${leadId}_edit`;
+  const proofId = `${kind}__${targetId}`;
+
+  const batch = writeBatch(db);
+  batch.set(doc(db, "deletionProofs", uid, "targets", proofId), {
+    uid,
+    kind,
+    targetId,
+    answerDigest,
+    secretVersion: question.version,
+    createdAt: serverTimestamp(),
+  });
+  batch.update(doc(db, "bruteForceJobs", leadId), {
+    company: fields.company.trim(),
+    phone: fields.phone.trim(),
+    location: fields.location.trim(),
+    mapLink,
+    role: fields.role.trim(),
+    updatedAt: serverTimestamp(),
+  });
+  await batch.commit();
+}
+
 
 export async function rescheduleBruteForceInterview(jobId: string, interviewAt: Date): Promise<void> {
   if (Number.isNaN(interviewAt.getTime()) || interviewAt.getTime() <= Date.now()) {
@@ -528,9 +572,9 @@ export type JobEditableFields = {
   ppo: string;
 };
 
-export async function updateJobFields(jobId: string, fields: JobEditableFields): Promise<void> {
+function jobFieldsPayload(fields: JobEditableFields) {
   const isIntern = fields.employmentType === "internship";
-  await updateDoc(doc(db, "jobs", jobId), {
+  return {
     company: fields.company.trim(),
     role: fields.role.trim(),
     location: fields.location.trim(),
@@ -546,7 +590,43 @@ export async function updateJobFields(jobId: string, fields: JobEditableFields):
     employmentType: fields.employmentType,
     internshipMonths: isIntern ? fields.internshipMonths.trim() : "",
     ppo: isIntern ? fields.ppo : "",
+  };
+}
+
+/** Unprotected update — only for admin/migration. Prefer updateJobFieldsWithAnswer. */
+export async function updateJobFields(jobId: string, fields: JobEditableFields): Promise<void> {
+  await updateDoc(doc(db, "jobs", jobId), jobFieldsPayload(fields));
+}
+
+/**
+ * Field edit gated by One Password in the same batch as a fresh deletion proof.
+ * Rules require proof targetId = `${jobId}_edit`.
+ */
+export async function updateJobFieldsWithAnswer(
+  uid: string,
+  jobId: string,
+  answer: string,
+  fields: JobEditableFields
+): Promise<void> {
+  const { getDeletionQuestion, digestDeletionAnswer } = await import("./deletionProtection");
+  const question = await getDeletionQuestion(uid);
+  if (!question) throw new Error("NO_DELETION_QUESTION");
+  const answerDigest = await digestDeletionAnswer(answer);
+  const kind = "jobs";
+  const targetId = `${jobId}_edit`;
+  const proofId = `${kind}__${targetId}`;
+
+  const batch = writeBatch(db);
+  batch.set(doc(db, "deletionProofs", uid, "targets", proofId), {
+    uid,
+    kind,
+    targetId,
+    answerDigest,
+    secretVersion: question.version,
+    createdAt: serverTimestamp(),
   });
+  batch.update(doc(db, "jobs", jobId), jobFieldsPayload(fields));
+  await batch.commit();
 }
 
 export async function updateJobRouteOrder(

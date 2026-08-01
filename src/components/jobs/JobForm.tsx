@@ -1,11 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { useStore } from "@nanostores/react";
 import { $auth } from "../../stores/authStore";
-import { createJob, createJobs, subscribeToUserJobs, type EmploymentType, type JobType, type JobCard } from "../../lib/firestore";
+import { createJob, getJobsByUID, type EmploymentType, type JobType, type JobCard } from "../../lib/firestore";
 import { showToast, ToastProvider } from "../ui/Toast";
 import { safeExternalUrl } from "../../lib/security";
 import { WALK_IN_ADD_JOB_ENABLED } from "../../lib/features";
-import { parseOnlineJobImport } from "../../lib/onlineJobImport";
 
 const ONLINE_VIA = ["Naukri.com", "LinkedIn", "Company Website", "Referral", "Others"];
 const WALKIN_VIA = ["Job hai", "Brute force", "By friend"];
@@ -53,12 +52,6 @@ interface WalkinForm {
   ppo: string;
 }
 
-type ImportProgress = {
-  status: "loading" | "complete" | "error";
-  title: string;
-  message: string;
-};
-
 const ONLINE_INIT: OnlineForm = {
   company: "", location: "", applyLink: "",
   appliedVia: "LinkedIn", appliedViaOther: "",
@@ -90,14 +83,15 @@ export default function JobForm() {
   const [walkin, setWalkin] = useState<WalkinForm>(WALKIN_INIT);
   const [loading, setLoading] = useState(false);
   const [done, setDone] = useState(false);
-  const [importing, setImporting] = useState(false);
-  const [importProgress, setImportProgress] = useState<ImportProgress | null>(null);
   const [pastJobs, setPastJobs] = useState<JobCard[]>([]);
 
   useEffect(() => {
     if (!auth.user) return;
-    const unsub = subscribeToUserJobs(auth.user.uid, setPastJobs);
-    return () => unsub();
+    let active = true;
+    getJobsByUID(auth.user.uid)
+      .then(jobs => { if (active) setPastJobs(jobs.slice(0, 80)); })
+      .catch(() => { if (active) setPastJobs([]); });
+    return () => { active = false; };
   }, [auth.user]);
 
   const suggest = useMemo(() => {
@@ -249,42 +243,6 @@ export default function JobForm() {
     }
   }
 
-  async function handleOnlineImport(event: React.ChangeEvent<HTMLInputElement>) {
-    const input = event.currentTarget;
-    const file = input.files?.[0];
-    if (!file) return;
-
-    const fail = (message: string) => {
-      setImportProgress({ status: "error", title: "Import failed", message });
-      showToast(message, "error");
-      input.value = "";
-    };
-    if (!auth.user || !auth.profile) { fail("Not logged in."); return; }
-    if (!file.name.toLowerCase().endsWith(".json")) { fail("Sirf .json file upload karo."); return; }
-    if (file.size > 1024 * 1024) { fail("JSON file maximum 1 MB ho sakti hai."); return; }
-
-    setImporting(true);
-    setImportProgress({ status: "loading", title: "Reading JSON file", message: `${file.name} read ho rahi hai…` });
-    try {
-      const contents = await file.text();
-      setImportProgress({ status: "loading", title: "Validating jobs", message: "Fields aur HTTPS apply links check ho rahe hain…" });
-      await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
-      const rows = parseOnlineJobImport(contents);
-      setImportProgress({ status: "loading", title: "Creating job cards", message: `${rows.length} online cards create ho rahe hain…` });
-      await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
-      const count = await createJobs(auth.user.uid, auth.profile.username, rows);
-      setImportProgress({ status: "complete", title: "Import complete", message: `${count} online job cards successfully create ho gaye.` });
-      showToast(`${count} jobs imported.`, "success");
-    } catch (err: any) {
-      const message = err.message ?? "JSON import failed.";
-      setImportProgress({ status: "error", title: "Import failed", message });
-      showToast(message, "error");
-    } finally {
-      setImporting(false);
-      input.value = "";
-    }
-  }
-
   async function submitWalkin(e: React.FormEvent) {
     e.preventDefault();
     if (!WALK_IN_ADD_JOB_ENABLED) { showToast("Add Job walk-in option is disabled.", "info"); return; }
@@ -338,31 +296,6 @@ export default function JobForm() {
       <datalist id="suggest-role">{suggest.role.map(v => <option key={v} value={v} />)}</datalist>
       <datalist id="suggest-location">{suggest.location.map(v => <option key={v} value={v} />)}</datalist>
       <datalist id="suggest-ctc">{suggest.ctc.map(v => <option key={v} value={v} />)}</datalist>
-
-      {importProgress && (
-        <div style={{ position: "fixed", inset: 0, zIndex: 2000, display: "flex", alignItems: "center", justifyContent: "center", padding: 20, background: "rgba(15,0,0,0.38)", backdropFilter: "blur(3px)" }}>
-          <div role="dialog" aria-modal="true" aria-live="polite" style={{ width: "min(430px, 100%)", padding: 24, borderRadius: 12, border: "1px solid var(--hairline-strong)", background: "var(--canvas)", boxShadow: "0 18px 60px rgba(15,0,0,0.2)" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-              {importProgress.status === "loading" ? (
-                <div className="spinner" style={{ width: 20, height: 20, flexShrink: 0 }} />
-              ) : (
-                <span aria-hidden="true" style={{ color: importProgress.status === "complete" ? "#15803d" : "#b91c1c", fontSize: 24 }}>
-                  {importProgress.status === "complete" ? "✓" : "!"}
-                </span>
-              )}
-              <div>
-                <h2 style={{ margin: 0, color: "var(--ink)", fontSize: 17 }}>{importProgress.title}</h2>
-                <p style={{ margin: "5px 0 0", color: "var(--mute)", fontSize: 12, lineHeight: 1.5 }}>{importProgress.message}</p>
-              </div>
-            </div>
-            {importProgress.status !== "loading" && (
-              <button type="button" className="btn btn-primary" onClick={() => importProgress.status === "complete" ? window.location.href = "/" : setImportProgress(null)} style={{ marginTop: 20 }}>
-                {importProgress.status === "complete" ? "View cards" : "Close"}
-              </button>
-            )}
-          </div>
-        </div>
-      )}
 
       <div className="page-header">
         <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 4 }}>
@@ -437,18 +370,6 @@ export default function JobForm() {
               ← change type
             </button>
           )}
-
-          <div style={{ marginBottom: 22, paddingBottom: 20, borderBottom: "1px solid var(--hairline)" }}>
-            <div style={{ fontSize: 15, fontWeight: 750, color: "var(--ink)" }}>Import online jobs from JSON</div>
-            <p className="form-hint" style={{ marginTop: 6 }}>Maximum 100 jobs aur 1 MB file. Role aur HTTPS applyLink required hain.</p>
-            <pre style={{ margin: "10px 0 12px", padding: 10, overflowX: "auto", borderRadius: 6, background: "var(--surface-soft)", color: "var(--body)", fontSize: 10, lineHeight: 1.5 }}>
-              {`[{"role":"Frontend Developer","company":"TCS","location":"Remote","applyLink":"https://example.com/apply","appliedVia":"LinkedIn"}]`}
-            </pre>
-            <label className="btn btn-secondary" style={{ opacity: importing ? 0.6 : 1, cursor: importing ? "wait" : "pointer" }}>
-              {importing ? "Importing…" : "Upload JSON file"}
-              <input type="file" accept=".json,application/json" disabled={importing} onChange={handleOnlineImport} style={{ display: "none" }} />
-            </label>
-          </div>
 
           <form onSubmit={submitOnline} style={{ display: "flex", flexDirection: "column", gap: 18 }}>
             <div className="form-group">

@@ -23,10 +23,12 @@ import {
   deleteBruteForceJobWithAnswer,
   deleteBruteForceJobsWithAnswer,
   deletionProtectionError,
+  verifyDeletionAnswer,
 } from "../../lib/deletionProtection";
 import { ToastProvider, showToast } from "../ui/Toast";
 import ShimmerSkeleton from "../ui/ShimmerSkeleton";
 import DeletionChallengeModal from "../ui/DeletionChallengeModal";
+import BruteForceEditModal from "./BruteForceEditModal";
 
 type DisplayStatus = BruteForceCallOutcome | Exclude<BruteForceDecision, "pending">;
 
@@ -215,6 +217,7 @@ interface LeadCardProps {
   selected: boolean;
   onToggleSelected: (leadId: string) => void;
   onDelete: (lead: BruteForceJob) => void;
+  onEdit: (lead: BruteForceJob) => void;
 }
 
 function LeadCard(props: LeadCardProps) {
@@ -271,6 +274,16 @@ function LeadCard(props: LeadCardProps) {
             style={props.onRoute ? { color: "#15803d", borderColor: "#bbf7d0", background: "#f0fdf4" } : undefined}
           >
             {props.onRoute ? "On Walk-in Route ✓" : "+ Add to Walk-in Route"}
+          </button>
+        )}
+        {props.canDelete && (
+          <button
+            type="button"
+            className="btn btn-secondary btn-sm"
+            disabled={busy}
+            onClick={() => props.onEdit(lead)}
+          >
+            Edit
           </button>
         )}
         {props.canDelete && (
@@ -475,6 +488,11 @@ export default function BruteForceJobsView() {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<BruteForceJob | null>(null);
   const [deleteError, setDeleteError] = useState("");
+  const [editTarget, setEditTarget] = useState<BruteForceJob | null>(null);
+  const [editAnswer, setEditAnswer] = useState("");
+  const [editUnlocked, setEditUnlocked] = useState(false);
+  const [editBusy, setEditBusy] = useState(false);
+  const [editError, setEditError] = useState("");
   const [selectedLeadIds, setSelectedLeadIds] = useState<Set<string>>(() => new Set());
   const [bulkDeleteIds, setBulkDeleteIds] = useState<string[] | null>(null);
   const [bulkDeleting, setBulkDeleting] = useState(false);
@@ -517,13 +535,13 @@ export default function BruteForceJobsView() {
   }, []);
 
   useEffect(() => {
-    if (didScrollToday.current || !todayChipRef.current) return;
+    if (loading || didScrollToday.current || !todayChipRef.current) return;
     didScrollToday.current = true;
     todayChipRef.current.scrollIntoView({ inline: "center", block: "nearest", behavior: "auto" });
-  }, [leads.length]);
+  }, [loading, leads.length]);
 
   const dayLeads = useMemo(
-    () => leads.filter(lead => dateKeyFromDate(new Date(toMillis(lead.createdAt))) === selectedRouteDate),
+    () => leads.filter(lead => dateKeyFromDate(new Date(toMillis(lead.createdAt) || Date.now())) === selectedRouteDate),
     [leads, selectedRouteDate]
   );
   const statusCounts = useMemo(() => {
@@ -562,7 +580,7 @@ export default function BruteForceJobsView() {
   const rawVisibleSection = sections.find(section => section.id === activeSection) ?? sections[0];
   const searchQuery = leadSearch.trim().toLowerCase();
   const sectionBaseItems = statusFilter
-    ? dayLeads.filter(lead => displayStatusOf(lead) === statusFilter)
+    ? rawVisibleSection.items.filter(lead => displayStatusOf(lead) === statusFilter)
     : rawVisibleSection.items;
   const shownItems = searchQuery
     ? sectionBaseItems.filter(lead =>
@@ -574,12 +592,18 @@ export default function BruteForceJobsView() {
     ...rawVisibleSection,
     items: shownItems,
     emptyTitle: statusFilter
-      ? `Is din koi “${STATUS_STYLES[statusFilter].label}” lead nahi`
+      ? `Is section mein “${STATUS_STYLES[statusFilter].label}” lead nahi`
       : rawVisibleSection.emptyTitle,
     emptyText: statusFilter
-      ? "Koi aur status chip choose karo, ya filter clear karo."
+      ? "Koi aur status chip choose karo, Clear filter, ya dusra tab try karo."
       : rawVisibleSection.emptyText,
   };
+  const LEAD_PAGE = 30;
+  const [leadLimit, setLeadLimit] = useState(LEAD_PAGE);
+  useEffect(() => {
+    setLeadLimit(LEAD_PAGE);
+  }, [activeSection, statusFilter, selectedRouteDate, leadSearch]);
+  const pagedLeads = visibleSection.items.slice(0, leadLimit);
   const visibleLeadIds = shownItems.map(lead => lead.id);
   const allVisibleSelected = visibleLeadIds.length > 0 && visibleLeadIds.every(id => selectedLeadIds.has(id));
 
@@ -817,6 +841,22 @@ export default function BruteForceJobsView() {
     }
   }
 
+  async function confirmEditUnlock(answer: string) {
+    const target = editTarget;
+    if (!target || !auth.user) return;
+    setEditBusy(true);
+    setEditError("");
+    try {
+      await verifyDeletionAnswer(auth.user.uid, answer, `bf_edit_${target.id}`);
+      setEditAnswer(answer);
+      setEditUnlocked(true);
+    } catch (error) {
+      setEditError(deletionProtectionError(error));
+    } finally {
+      setEditBusy(false);
+    }
+  }
+
   async function addLeadToRouteOn(lead: BruteForceJob, routeDate: string) {
     if (!auth.user || !auth.profile) {
       showToast("Not logged in.", "error");
@@ -833,7 +873,6 @@ export default function BruteForceJobsView() {
         existingJobIds.has(routeJobId),
         routeDate
       );
-      setRoutePickLead(null);
       showToast(`${routeDateLabel(routeDate)} ke Walk-in Route mein add ho gaya.`, "success");
     } catch (err: any) {
       showToast(err.message ?? "Walk-in Route mein add nahi ho paya.", "error");
@@ -852,10 +891,32 @@ export default function BruteForceJobsView() {
           uid={auth.user.uid}
           title="Delete this Brute Force lead?"
           targetLabel={`“${deleteTarget.company}”`}
+          description="Delete se pehle Settings → One Password ka answer verify karo."
+          confirmLabel="Verify & delete"
           busy={busyId === deleteTarget.id}
           error={deleteError}
           onCancel={() => { if (busyId !== deleteTarget.id) { setDeleteTarget(null); setDeleteError(""); } }}
           onConfirm={confirmDelete}
+        />
+      )}
+      {editTarget && auth.user && !editUnlocked && (
+        <DeletionChallengeModal
+          uid={auth.user.uid}
+          title="Edit this lead?"
+          description="Lead edit karne se pehle Settings → One Password ka answer verify karo."
+          confirmLabel="Verify & edit"
+          confirmTone="primary"
+          busy={editBusy}
+          error={editError}
+          onCancel={() => { if (!editBusy) { setEditTarget(null); setEditError(""); } }}
+          onConfirm={confirmEditUnlock}
+        />
+      )}
+      {editUnlocked && editTarget && (
+        <BruteForceEditModal
+          lead={editTarget}
+          onePasswordAnswer={editAnswer}
+          onClose={() => { setEditUnlocked(false); setEditTarget(null); setEditAnswer(""); }}
         />
       )}
       {bulkDeleteIds && auth.user && (
@@ -863,6 +924,8 @@ export default function BruteForceJobsView() {
           uid={auth.user.uid}
           title={`Delete ${bulkDeleteIds.length} selected cards?`}
           targetLabel={`${bulkDeleteIds.length} selected Brute Force cards`}
+          description="Delete se pehle Settings → One Password ka answer verify karo."
+          confirmLabel="Verify & delete"
           busy={bulkDeleting}
           error={bulkDeleteError}
           onCancel={() => { if (!bulkDeleting) { setBulkDeleteIds(null); setBulkDeleteError(""); } }}
@@ -1000,7 +1063,15 @@ export default function BruteForceJobsView() {
                 key={statusKey}
                 type="button"
                 title={STATUS_REASON[statusKey]}
-                onClick={() => setStatusFilter(prev => (prev === statusKey ? null : statusKey))}
+                onClick={() => {
+                  setStatusFilter(prev => {
+                    const next = prev === statusKey ? null : statusKey;
+                    if (next === "selected") setActiveSection("selected");
+                    else if (next === "rejected") setActiveSection("rejected");
+                    else if (next) setActiveSection("active");
+                    return next;
+                  });
+                }}
                 style={{
                   display: "inline-flex",
                   alignItems: "center",
@@ -1318,7 +1389,7 @@ export default function BruteForceJobsView() {
           </div>
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 14, marginBottom: 40 }}>
-            {visibleSection.items.map(lead => {
+            {pagedLeads.map(lead => {
               const isActiveLead = activeSection === "active";
               return (
                 <LeadCard
@@ -1342,9 +1413,19 @@ export default function BruteForceJobsView() {
                   selected={selectedLeadIds.has(lead.id)}
                   onToggleSelected={toggleLeadSelection}
                   onDelete={leadToDelete => { setDeleteError(""); setDeleteTarget(leadToDelete); }}
+                  onEdit={leadToEdit => { setEditError(""); setEditUnlocked(false); setEditAnswer(""); setEditTarget(leadToEdit); }}
                 />
               );
             })}
+            {pagedLeads.length < visibleSection.items.length && (
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() => setLeadLimit(n => n + LEAD_PAGE)}
+              >
+                Load more ({pagedLeads.length}/{visibleSection.items.length})
+              </button>
+            )}
           </div>
         )}
       </section>

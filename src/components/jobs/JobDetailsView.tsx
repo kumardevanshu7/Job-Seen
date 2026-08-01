@@ -7,6 +7,7 @@ import {
   type JobCard as JobCardType,
   type JobStatus,
 } from "../../lib/firestore";
+import { serverTimestamp } from "firebase/firestore";
 import { deleteJobWithAnswer, deletionProtectionError, verifyDeletionAnswer } from "../../lib/deletionProtection";
 import { ToastProvider, showToast } from "../ui/Toast";
 import DeletionChallengeModal from "../ui/DeletionChallengeModal";
@@ -266,6 +267,7 @@ export default function JobDetailsView() {
   const [deleteError, setDeleteError] = useState("");
   const [editChallengeOpen, setEditChallengeOpen] = useState(false);
   const [editUnlocked, setEditUnlocked] = useState(false);
+  const [editAnswer, setEditAnswer] = useState("");
   const [editBusy, setEditBusy] = useState(false);
   const [editError, setEditError] = useState("");
 
@@ -315,8 +317,13 @@ export default function JobDetailsView() {
     if (!job || !isOwner) return;
     setUpdating(true);
     try {
-      await updateJobStatus(job.id, next);
-      setJob({ ...job, status: next });
+      const extra = next === "applied" ? { appliedAt: serverTimestamp() } : undefined;
+      await updateJobStatus(job.id, next, extra);
+      setJob({
+        ...job,
+        status: next,
+        ...(next === "applied" ? { appliedAt: new Date() } : {}),
+      });
       showToast(`Status: ${STATUS_CONFIG[next].label}`, "success");
     } catch {
       showToast("Failed to update status.", "error");
@@ -362,6 +369,7 @@ export default function JobDetailsView() {
     setEditError("");
     try {
       await verifyDeletionAnswer(auth.user.uid, answer, `edit_${job.id}`);
+      setEditAnswer(answer);
       setEditChallengeOpen(false);
       setEditUnlocked(true);
     } catch (error) {
@@ -404,6 +412,8 @@ export default function JobDetailsView() {
           uid={auth.user.uid}
           title="Delete this job?"
           targetLabel="This job"
+          description="Delete se pehle Settings → One Password ka answer verify karo."
+          confirmLabel="Verify & delete"
           busy={deleteBusy}
           error={deleteError}
           onCancel={() => { if (!deleteBusy) { setDeleteOpen(false); setDeleteError(""); } }}
@@ -414,7 +424,7 @@ export default function JobDetailsView() {
         <DeletionChallengeModal
           uid={auth.user.uid}
           title="Edit this job?"
-          description="Job edit karne se pehle Settings wala deletion-protection answer verify karo."
+          description="Job edit karne se pehle Settings → One Password ka answer verify karo."
           confirmLabel="Verify & edit"
           confirmTone="primary"
           busy={editBusy}
@@ -426,7 +436,8 @@ export default function JobDetailsView() {
       {editUnlocked && job && (
         <JobEditModal
           job={job}
-          onClose={() => setEditUnlocked(false)}
+          onePasswordAnswer={editAnswer}
+          onClose={() => { setEditUnlocked(false); setEditAnswer(""); }}
           onSaved={() => { void refreshJob(); }}
         />
       )}

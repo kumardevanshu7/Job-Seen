@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type CSSProperties } from "react";
 import { useStore } from "@nanostores/react";
 import { $auth } from "../../stores/authStore";
 import { copyJob, getPermission, updateJobStatus, setJobOnRoute } from "../../lib/firestore";
@@ -72,6 +72,22 @@ const platformShort: Record<string, string> = {
   "Others":           "other",
 };
 
+const footerBtnBase: CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  height: 32,
+  padding: "0 12px",
+  borderRadius: 5,
+  fontSize: 12,
+  fontWeight: 600,
+  lineHeight: 1,
+  cursor: "pointer",
+  fontFamily: "inherit",
+  boxSizing: "border-box",
+  whiteSpace: "nowrap",
+};
+
 function isOnWalkInRoute(job: JobCardType): boolean {
   if (job.onRoute === true) return true;
   if (job.onRoute === false) return false;
@@ -88,8 +104,15 @@ export default function JobCard({ job, showCopy = true, isOwner = false, onDelet
   const [onRoute, setOnRoute] = useState(isOnWalkInRoute(job));
   const [editChallengeOpen, setEditChallengeOpen] = useState(false);
   const [editUnlocked, setEditUnlocked] = useState(false);
+  const [editAnswer, setEditAnswer] = useState("");
   const [editBusy, setEditBusy] = useState(false);
   const [editError, setEditError] = useState("");
+  const [routeDateOpen, setRouteDateOpen] = useState(false);
+  const [routeDatePick, setRouteDatePick] = useState(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  });
+  const [routeBusy, setRouteBusy] = useState(false);
 
   // keep local flags in sync with live firestore updates
   useEffect(() => {
@@ -164,14 +187,41 @@ export default function JobCard({ job, showCopy = true, isOwner = false, onDelet
   async function toggleRoute(e: React.MouseEvent) {
     e.stopPropagation();
     if (!isOwner) return;
-    const next = !onRoute;
-    setOnRoute(next);
+    if (onRoute) {
+      setRouteBusy(true);
+      setOnRoute(false);
+      try {
+        await setJobOnRoute(job.id, false);
+        showToast("Removed from Walk-in Route.", "info");
+      } catch {
+        setOnRoute(true);
+        showToast("Couldn’t update route.", "error");
+      } finally {
+        setRouteBusy(false);
+      }
+      return;
+    }
+    const d = new Date();
+    setRouteDatePick(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`);
+    setRouteDateOpen(true);
+  }
+
+  async function confirmAddToRoute() {
+    if (!routeDatePick) {
+      showToast("Route date choose karo.", "error");
+      return;
+    }
+    setRouteBusy(true);
+    setOnRoute(true);
     try {
-      await setJobOnRoute(job.id, next);
-      showToast(next ? "Added to Walk-in Route." : "Removed from Walk-in Route.", "info");
+      await setJobOnRoute(job.id, true, Date.now(), routeDatePick);
+      setRouteDateOpen(false);
+      showToast(`Walk-in Route pe add ho gaya (${routeDatePick}).`, "info");
     } catch {
-      setOnRoute(!next);
+      setOnRoute(false);
       showToast("Couldn’t update route.", "error");
+    } finally {
+      setRouteBusy(false);
     }
   }
 
@@ -187,7 +237,9 @@ export default function JobCard({ job, showCopy = true, isOwner = false, onDelet
     setEditBusy(true);
     setEditError("");
     try {
+      // Early check — wrong answer fails here; save still writes a fresh same-batch proof.
       await verifyDeletionAnswer(auth.user.uid, answer, `edit_${job.id}`);
+      setEditAnswer(answer);
       setEditChallengeOpen(false);
       setEditUnlocked(true);
     } catch (error) {
@@ -215,7 +267,7 @@ export default function JobCard({ job, showCopy = true, isOwner = false, onDelet
       <DeletionChallengeModal
         uid={auth.user.uid}
         title="Edit this job?"
-        description="Job edit karne se pehle Settings wala deletion-protection answer verify karo."
+        description="Job edit karne se pehle Settings → One Password ka answer verify karo."
         confirmLabel="Verify & edit"
         confirmTone="primary"
         busy={editBusy}
@@ -227,8 +279,49 @@ export default function JobCard({ job, showCopy = true, isOwner = false, onDelet
     {editUnlocked && (
       <JobEditModal
         job={job}
-        onClose={() => setEditUnlocked(false)}
+        onePasswordAnswer={editAnswer}
+        onClose={() => { setEditUnlocked(false); setEditAnswer(""); }}
       />
+    )}
+    {routeDateOpen && (
+      <>
+        <div
+          onClick={() => { if (!routeBusy) setRouteDateOpen(false); }}
+          style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", backdropFilter: "blur(2px)", zIndex: 9000 }}
+        />
+        <div
+          role="dialog"
+          aria-modal="true"
+          onClick={e => e.stopPropagation()}
+          style={{
+            position: "fixed", top: "50%", left: "50%", transform: "translate(-50%, -50%)",
+            zIndex: 9001, width: "min(360px, calc(100vw - 28px))", padding: 22,
+            background: "var(--canvas)", border: "1.5px solid var(--hairline)",
+            borderRadius: 10, boxShadow: "0 20px 60px rgba(0,0,0,0.18)", fontFamily: "inherit",
+          }}
+        >
+          <h2 style={{ margin: "0 0 6px", fontSize: 16, color: "var(--ink)" }}>Add to Walk-in Route</h2>
+          <p style={{ margin: "0 0 14px", fontSize: 12, color: "var(--mute)", lineHeight: 1.45 }}>
+            Kis din ke route pe daalna hai? Default = Today.
+          </p>
+          <div className="form-group">
+            <label className="form-label">route date</label>
+            <input
+              className="form-input"
+              type="date"
+              value={routeDatePick}
+              onChange={e => setRouteDatePick(e.target.value)}
+              style={{ colorScheme: "light", fontFamily: "inherit" }}
+            />
+          </div>
+          <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 16 }}>
+            <button type="button" className="btn btn-secondary" disabled={routeBusy} onClick={() => setRouteDateOpen(false)}>Cancel</button>
+            <button type="button" className="btn btn-primary" disabled={routeBusy || !routeDatePick} onClick={() => void confirmAddToRoute()}>
+              {routeBusy ? "Adding…" : "Add to route"}
+            </button>
+          </div>
+        </div>
+      </>
     )}
     <div
       className="job-card"
@@ -239,11 +332,11 @@ export default function JobCard({ job, showCopy = true, isOwner = false, onDelet
       style={{
         background: cfg.bg,
         border: `1.5px solid ${cfg.border}`,
-        borderRadius: variant === "kanban" ? 8 : 10,
-        padding: variant === "kanban" ? 14 : 20,
+        borderRadius: variant === "kanban" ? 8 : 12,
+        padding: variant === "kanban" ? 14 : "18px 18px 16px",
         display: "flex",
         flexDirection: "column",
-        gap: variant === "kanban" ? 12 : 16,
+        gap: variant === "kanban" ? 12 : 14,
         position: "relative",
         transition: "all 0.2s ease",
         cursor: draggable ? "grab" : (onClick ? "pointer" : "default"),
@@ -251,22 +344,22 @@ export default function JobCard({ job, showCopy = true, isOwner = false, onDelet
       }}
     >
       {/* ── Header Row ── */}
-      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 14, flexWrap: "wrap" }}>
         <div style={{ minWidth: 0, flex: 1 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8, flexWrap: "wrap" }}>
             <span style={{
               fontSize: 11, fontWeight: 700, textTransform: "uppercase",
               letterSpacing: "0.06em", background: "var(--ink, #201d1d)",
-              color: "var(--canvas, #fdfcfc)", padding: "2px 7px", borderRadius: 3,
+              color: "var(--canvas, #fdfcfc)", padding: "3px 8px", borderRadius: 4,
             }}>
               {job.company || "Company"}
             </span>
             {job.copiedFromUsername && (
-              <span style={{ 
-                color: "#94a3b8", 
-                fontFamily: "Consolas, Monaco, 'Courier New', monospace", 
-                display: "flex", 
-                alignItems: "center", 
+              <span style={{
+                color: "#94a3b8",
+                fontFamily: "Consolas, Monaco, 'Courier New', monospace",
+                display: "flex",
+                alignItems: "center",
                 gap: 4,
                 fontSize: 11,
                 letterSpacing: "0.02em"
@@ -276,49 +369,56 @@ export default function JobCard({ job, showCopy = true, isOwner = false, onDelet
               </span>
             )}
           </div>
-          <h3 style={{ fontSize: 16, fontWeight: 700, color: "var(--ink, #201d1d)", margin: 0, lineHeight: 1.3 }}>
+          <h3 style={{ fontSize: 16, fontWeight: 700, color: "var(--ink, #201d1d)", margin: 0, lineHeight: 1.35, letterSpacing: "-0.01em" }}>
             {job.role || "Job Role"}
           </h3>
         </div>
 
-        <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 6 }}>
-          {/* Status Badge */}
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 8 }}>
           {variant !== "kanban" && (
             <span style={{
-              fontSize: 11, fontWeight: 700, padding: "3px 10px",
+              fontSize: 11, fontWeight: 700, padding: "4px 10px",
               borderRadius: 20, border: `1px solid ${cfg.border}`,
               color: cfg.color, background: "white", whiteSpace: "nowrap",
             }}>
               {cfg.label}
             </span>
           )}
-          {/* CTC */}
-          {job.ctc && (
+          {job.ctc && job.ctc !== "N/A" && (
             <span style={{
               background: "#f0faf4", border: "1px solid #b7eb8f",
               color: "#237804", fontSize: 11, fontWeight: 700,
-              padding: "2px 8px", borderRadius: 4,
+              padding: "3px 9px", borderRadius: 4,
             }}>
               ₹ {job.ctc}
+            </span>
+          )}
+          {job.ctc === "N/A" && (
+            <span style={{
+              background: "#f5f3f3", border: "1px solid var(--hairline,#e2dede)",
+              color: "var(--mute,#686262)", fontSize: 11, fontWeight: 600,
+              padding: "3px 9px", borderRadius: 4,
+            }}>
+              CTC N/A
             </span>
           )}
         </div>
       </div>
 
       {/* ── Meta Chips ── */}
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-        <span className="shrink-hide" style={{ background: "#f5f3f3", border: "1px solid var(--hairline,#e2dede)", color: "var(--body,#423e3e)", fontSize: 11, fontWeight: 600, padding: "3px 8px", borderRadius: 3 }}>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "flex-start" }}>
+        <span className="shrink-hide" style={{ background: "#f5f3f3", border: "1px solid var(--hairline,#e2dede)", color: "var(--body,#423e3e)", fontSize: 11, fontWeight: 600, padding: "4px 9px", borderRadius: 4, lineHeight: 1.35 }}>
           source: {platform}
         </span>
         {job.employmentType && (
-          <span style={{ background: "#eff6ff", border: "1px solid #bfdbfe", color: "#1d4ed8", fontSize: 11, fontWeight: 600, padding: "3px 8px", borderRadius: 3 }}>
+          <span style={{ background: "#eff6ff", border: "1px solid #bfdbfe", color: "#1d4ed8", fontSize: 11, fontWeight: 600, padding: "4px 9px", borderRadius: 4, lineHeight: 1.35 }}>
             {job.employmentType === "full_time" ? "full-time"
               : job.employmentType === "part_time" ? "part-time"
               : "internship"}
           </span>
         )}
         {job.employmentType === "internship" && job.internshipMonths && (
-          <span style={{ background: "#f5f3ff", border: "1px solid #ddd6fe", color: "#6d28d9", fontSize: 11, padding: "3px 8px", borderRadius: 3 }}>
+          <span style={{ background: "#f5f3ff", border: "1px solid #ddd6fe", color: "#6d28d9", fontSize: 11, padding: "4px 9px", borderRadius: 4, lineHeight: 1.35 }}>
             {/^\d+(\.\d+)?$/.test(job.internshipMonths.trim())
               ? `${job.internshipMonths} mo`
               : job.internshipMonths}
@@ -329,43 +429,43 @@ export default function JobCard({ job, showCopy = true, isOwner = false, onDelet
             background: job.ppo === "yes" ? "#f0faf4" : "#fafaf9",
             border: job.ppo === "yes" ? "1px solid #b7eb8f" : "1px solid #d6d3d1",
             color: job.ppo === "yes" ? "#1a7a3c" : "#78716c",
-            fontSize: 11, fontWeight: 600, padding: "3px 8px", borderRadius: 3,
+            fontSize: 11, fontWeight: 600, padding: "4px 9px", borderRadius: 4, lineHeight: 1.35,
           }}>
-            PPO: {job.ppo === "yes" ? "yes" : job.ppo === "no" ? "no" : "maybe"}
+            PPO: {job.ppo === "yes" ? "yes" : job.ppo === "no" ? "no" : job.ppo === "maybe" ? "maybe" : "not sure"}
           </span>
         )}
         {job.location && (
-          <span style={{ background: "#f5f3f3", border: "1px solid var(--hairline,#e2dede)", color: "var(--body,#423e3e)", fontSize: 11, padding: "3px 8px", borderRadius: 3 }}>
+          <span style={{ background: "#f5f3f3", border: "1px solid var(--hairline,#e2dede)", color: "var(--body,#423e3e)", fontSize: 11, padding: "4px 9px", borderRadius: 4, lineHeight: 1.35 }}>
             ⌖ {job.location}
           </span>
         )}
         {job.batch?.length > 0 && (
-          <span className="shrink-hide" style={{ background: "#f5f3f3", border: "1px solid var(--hairline,#e2dede)", color: "var(--body,#423e3e)", fontSize: 11, padding: "3px 8px", borderRadius: 3 }}>
+          <span className="shrink-hide" style={{ background: "#f5f3f3", border: "1px solid var(--hairline,#e2dede)", color: "var(--body,#423e3e)", fontSize: 11, padding: "4px 9px", borderRadius: 4, lineHeight: 1.45, maxWidth: "100%", flex: "1 1 100%" }}>
             batch: {job.batch.join(", ")}
           </span>
         )}
         {job.bond && (
-          <span className="shrink-hide" style={{ background: "#f5f3f3", border: "1px solid var(--hairline,#e2dede)", color: "var(--body,#423e3e)", fontSize: 11, padding: "3px 8px", borderRadius: 3 }}>
+          <span className="shrink-hide" style={{ background: "#f5f3f3", border: "1px solid var(--hairline,#e2dede)", color: "var(--body,#423e3e)", fontSize: 11, padding: "4px 9px", borderRadius: 4, lineHeight: 1.35 }}>
             bond: {job.bond}
           </span>
         )}
         {job.lastDate && (
-          <span className={dateClass(job.lastDate)} style={{ border: "1px solid var(--hairline,#e2dede)", fontSize: 11, fontWeight: 600, padding: "3px 8px", borderRadius: 3 }}>
+          <span className={dateClass(job.lastDate)} style={{ border: "1px solid var(--hairline,#e2dede)", fontSize: 11, fontWeight: 600, padding: "4px 9px", borderRadius: 4, lineHeight: 1.35 }}>
             ⏱ {formatDate(job.lastDate)}
           </span>
         )}
         {job.appliedAt && (
-          <span style={{ background: "#eff6ff", border: "1px solid #bfdbfe", color: "#1d4ed8", fontSize: 11, padding: "3px 8px", borderRadius: 3 }}>
+          <span style={{ background: "#eff6ff", border: "1px solid #bfdbfe", color: "#1d4ed8", fontSize: 11, padding: "4px 9px", borderRadius: 4, lineHeight: 1.35 }}>
             applied {daysApplied === 0 ? "today" : `${daysApplied}d ago`}
           </span>
         )}
         {status === "cancelled" && (
-          <span style={{ background: "#fafaf9", border: "1px solid #d6d3d1", color: "#78716c", fontSize: 11, padding: "3px 8px", borderRadius: 3 }}>
+          <span style={{ background: "#fafaf9", border: "1px solid #d6d3d1", color: "#78716c", fontSize: 11, padding: "4px 9px", borderRadius: 4, lineHeight: 1.35 }}>
             why: {job.cancelReason || "—"}
           </span>
         )}
         {WALK_IN_ENABLED && onRoute && (
-          <span style={{ background: "#fff7ed", border: "1px solid #fdba74", color: "#c2410c", fontSize: 11, padding: "3px 8px", borderRadius: 3 }}>
+          <span style={{ background: "#fff7ed", border: "1px solid #fdba74", color: "#c2410c", fontSize: 11, padding: "4px 9px", borderRadius: 4, lineHeight: 1.35 }}>
             on route
           </span>
         )}
@@ -375,30 +475,30 @@ export default function JobCard({ job, showCopy = true, isOwner = false, onDelet
       {showReminder && (
         <div style={{
           background: "#f5f3ff", border: "1.5px solid #c4b5fd",
-          borderRadius: 6, padding: "12px 14px",
+          borderRadius: 8, padding: "12px 14px",
         }}>
-          <div style={{ fontSize: 13, fontWeight: 600, color: "#6d28d9", marginBottom: 8 }}>
+          <div style={{ fontSize: 13, fontWeight: 600, color: "#6d28d9", marginBottom: 10, lineHeight: 1.4 }}>
             ⏰ Applied {daysApplied} din pehle — Gmail / messages check karo, unka response aaya kya?
           </div>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             <button
               onClick={() => dismissReminder("no_response")}
               disabled={updating}
-              style={{ fontSize: 12, fontWeight: 600, padding: "5px 12px", borderRadius: 4, cursor: "pointer", background: "#ede9fe", border: "1px solid #c4b5fd", color: "#6d28d9", fontFamily: "inherit" }}
+              style={{ fontSize: 12, fontWeight: 600, padding: "7px 12px", borderRadius: 5, cursor: "pointer", background: "#ede9fe", border: "1px solid #c4b5fd", color: "#6d28d9", fontFamily: "inherit" }}
             >
               No, response nahi aaya yet
             </button>
             <button
               onClick={() => dismissReminder("selected")}
               disabled={updating}
-              style={{ fontSize: 12, fontWeight: 600, padding: "5px 12px", borderRadius: 4, cursor: "pointer", background: "#fef9c3", border: "1px solid #fcd34d", color: "#92400e", fontFamily: "inherit" }}
+              style={{ fontSize: 12, fontWeight: 600, padding: "7px 12px", borderRadius: 5, cursor: "pointer", background: "#fef9c3", border: "1px solid #fcd34d", color: "#92400e", fontFamily: "inherit" }}
             >
               🎉 Haan, selected ho gaya!
             </button>
             <button
               onClick={() => dismissReminder("rejected")}
               disabled={updating}
-              style={{ fontSize: 12, fontWeight: 600, padding: "5px 12px", borderRadius: 4, cursor: "pointer", background: "#f1f5f9", border: "1px solid #cbd5e1", color: "#475569", fontFamily: "inherit" }}
+              style={{ fontSize: 12, fontWeight: 600, padding: "7px 12px", borderRadius: 5, cursor: "pointer", background: "#f1f5f9", border: "1px solid #cbd5e1", color: "#475569", fontFamily: "inherit" }}
             >
               Rejected ho gaya
             </button>
@@ -408,66 +508,74 @@ export default function JobCard({ job, showCopy = true, isOwner = false, onDelet
 
       {/* ── Action Status Buttons (owner only) ── */}
       {isOwner && status !== "rejected" && status !== "selected" && status !== "cancelled" && variant !== "kanban" && (
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
           {status === "pending" && (
-            <>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
               <button
                 onClick={(e) => { e.stopPropagation(); setStatus("applied"); }}
                 disabled={updating}
-                style={{ fontSize: 12, fontWeight: 700, padding: "6px 14px", borderRadius: 4, cursor: "pointer", background: "#dcfce7", border: "1.5px solid #86efac", color: "#15803d", fontFamily: "inherit" }}
+                style={{ fontSize: 12, fontWeight: 700, padding: "7px 14px", borderRadius: 5, cursor: "pointer", background: "#dcfce7", border: "1.5px solid #86efac", color: "#15803d", fontFamily: "inherit", lineHeight: 1.2 }}
               >
                 ✓<span className="shrink-hide"> Applied</span>
               </button>
               <button
                 disabled
                 onClick={e => e.stopPropagation()}
-                style={{ fontSize: 12, padding: "6px 14px", borderRadius: 4, background: "#fee2e2", border: "1.5px solid #fca5a5", color: "#b91c1c", opacity: 0.6, fontFamily: "inherit" }}
+                style={{ fontSize: 12, padding: "7px 14px", borderRadius: 5, background: "#fee2e2", border: "1.5px solid #fca5a5", color: "#b91c1c", opacity: 0.6, fontFamily: "inherit", lineHeight: 1.2 }}
               >
                 ✗<span className="shrink-hide"> Not Applied</span>
               </button>
-            </>
-          )}
-          {(status === "applied" || status === "no_response" || status === "in_progress") && (
-            <div style={{ fontSize: 12, color: status === "no_response" ? "#7c3aed" : "var(--mute,#686262)" }}>
-              <span className="shrink-hide">{status === "no_response" ? "Still waiting... →" : "Status update karo agar response aaye →"}</span>
-              <button onClick={(e) => { e.stopPropagation(); setStatus("in_progress"); }} disabled={updating} style={{ marginLeft: 8, fontSize: 12, fontWeight: 700, padding: "4px 10px", borderRadius: 4, cursor: "pointer", background: "#fffbeb", border: "1px solid #fde68a", color: "#b45309", fontFamily: "inherit" }}>
-                <span className="shrink-hide">Pending </span>⏳
-              </button>
-              <button onClick={(e) => { e.stopPropagation(); setStatus("selected"); }} disabled={updating} style={{ marginLeft: 6, fontSize: 12, fontWeight: 700, padding: "4px 10px", borderRadius: 4, cursor: "pointer", background: "#fef9c3", border: "1px solid #fcd34d", color: "#92400e", fontFamily: "inherit" }}>
-                <span className="shrink-hide">Selected </span>🎉
-              </button>
-              <button onClick={(e) => { e.stopPropagation(); setStatus("rejected"); }} disabled={updating} style={{ marginLeft: 6, fontSize: 12, padding: "4px 10px", borderRadius: 4, cursor: "pointer", background: "#f1f5f9", border: "1px solid #cbd5e1", color: "#475569", fontFamily: "inherit" }}>
-                <span className="shrink-hide">Rejected </span>❌
-              </button>
-              <button onClick={(e) => { e.stopPropagation(); setShowCancelReason(true); }} disabled={updating} style={{ marginLeft: 6, fontSize: 12, padding: "4px 10px", borderRadius: 4, cursor: "pointer", background: "#fafaf9", border: "1px solid #d6d3d1", color: "#78716c", fontFamily: "inherit" }}>
-                <span className="shrink-hide">Cancelled </span>⊘
+              <button
+                onClick={(e) => { e.stopPropagation(); setShowCancelReason(true); }}
+                disabled={updating}
+                style={{ fontSize: 12, padding: "7px 12px", borderRadius: 5, cursor: "pointer", background: "#fafaf9", border: "1px solid #d6d3d1", color: "#78716c", fontFamily: "inherit", lineHeight: 1.2 }}
+              >
+                Cancelled ⊘
               </button>
             </div>
           )}
-          {status === "pending" && (
-            <button
-              onClick={(e) => { e.stopPropagation(); setShowCancelReason(true); }}
-              disabled={updating}
-              style={{ fontSize: 12, padding: "6px 12px", borderRadius: 4, cursor: "pointer", background: "#fafaf9", border: "1px solid #d6d3d1", color: "#78716c", fontFamily: "inherit" }}
-            >
-              Cancelled ⊘
-            </button>
+          {(status === "applied" || status === "no_response" || status === "in_progress") && (
+            <>
+              <div style={{ fontSize: 12, color: status === "no_response" ? "#7c3aed" : "var(--mute,#686262)", lineHeight: 1.4 }}>
+                <span className="shrink-hide">{status === "no_response" ? "Still waiting… update status →" : "Status update karo agar response aaye →"}</span>
+              </div>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <button onClick={(e) => { e.stopPropagation(); setStatus("in_progress"); }} disabled={updating} style={{ fontSize: 12, fontWeight: 700, padding: "7px 12px", borderRadius: 5, cursor: "pointer", background: "#fffbeb", border: "1px solid #fde68a", color: "#b45309", fontFamily: "inherit", lineHeight: 1.2 }}>
+                  <span className="shrink-hide">Pending </span>⏳
+                </button>
+                <button onClick={(e) => { e.stopPropagation(); setStatus("selected"); }} disabled={updating} style={{ fontSize: 12, fontWeight: 700, padding: "7px 12px", borderRadius: 5, cursor: "pointer", background: "#fef9c3", border: "1px solid #fcd34d", color: "#92400e", fontFamily: "inherit", lineHeight: 1.2 }}>
+                  <span className="shrink-hide">Selected </span>🎉
+                </button>
+                <button onClick={(e) => { e.stopPropagation(); setStatus("rejected"); }} disabled={updating} style={{ fontSize: 12, padding: "7px 12px", borderRadius: 5, cursor: "pointer", background: "#f1f5f9", border: "1px solid #cbd5e1", color: "#475569", fontFamily: "inherit", lineHeight: 1.2 }}>
+                  <span className="shrink-hide">Rejected </span>❌
+                </button>
+                <button onClick={(e) => { e.stopPropagation(); setShowCancelReason(true); }} disabled={updating} style={{ fontSize: 12, padding: "7px 12px", borderRadius: 5, cursor: "pointer", background: "#fafaf9", border: "1px solid #d6d3d1", color: "#78716c", fontFamily: "inherit", lineHeight: 1.2 }}>
+                  <span className="shrink-hide">Cancelled </span>⊘
+                </button>
+              </div>
+            </>
           )}
         </div>
       )}
 
       {/* ── Footer ── */}
       <div style={{
-        borderTop: `1px solid ${cfg.border}`, paddingTop: 12,
-        display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 10,
+        borderTop: `1px solid ${cfg.border}`,
+        marginTop: 2,
+        paddingTop: 14,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        flexWrap: "wrap",
+        gap: 12,
       }}>
-        <div className="shrink-hide" style={{ fontSize: 11, color: "var(--mute,#686262)", display: "flex", alignItems: "center", gap: 4 }}>
+        <div className="shrink-hide" style={{ fontSize: 11, color: "var(--mute,#686262)", display: "flex", alignItems: "center", gap: 4, lineHeight: 1.4 }}>
           {job.copiedFromUsername ? (
-            <span style={{ 
-              color: "#94a3b8", 
-              fontFamily: "Consolas, Monaco, 'Courier New', monospace", 
-              display: "flex", 
-              alignItems: "center", 
+            <span style={{
+              color: "#94a3b8",
+              fontFamily: "Consolas, Monaco, 'Courier New', monospace",
+              display: "flex",
+              alignItems: "center",
               gap: 6,
               fontSize: 12
             }}>
@@ -478,16 +586,17 @@ export default function JobCard({ job, showCopy = true, isOwner = false, onDelet
             `added by @${job.ownerUsername}`
           )}
         </div>
-        <div style={{ display: "flex", gap: 8 }}>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
           {WALK_IN_ENABLED && isOwner && (
             <button
               onClick={toggleRoute}
+              disabled={routeBusy}
               style={{
+                ...footerBtnBase,
                 background: onRoute ? "#fff7ed" : "transparent",
                 color: onRoute ? "#c2410c" : "var(--ink,#201d1d)",
                 border: onRoute ? "1px solid #fdba74" : "1px solid var(--hairline,#e2dede)",
-                padding: "5px 10px", borderRadius: 3, fontSize: 12, fontWeight: 600,
-                cursor: "pointer", fontFamily: "inherit",
+                opacity: routeBusy ? 0.65 : 1,
               }}
             >
               {onRoute ? "On Route ✓" : "+ Route"}
@@ -495,7 +604,14 @@ export default function JobCard({ job, showCopy = true, isOwner = false, onDelet
           )}
           {safeExternalUrl(job.applyLink) && (
             <a href={safeExternalUrl(job.applyLink)!} target="_blank" rel="noopener noreferrer"
-              style={{ background: "var(--ink,#201d1d)", color: "var(--canvas,#fdfcfc)", padding: "6px 14px", borderRadius: 3, fontSize: 12, fontWeight: 700, textDecoration: "none" }}
+              style={{
+                ...footerBtnBase,
+                background: "var(--ink,#201d1d)",
+                color: "var(--canvas,#fdfcfc)",
+                border: "1px solid var(--ink,#201d1d)",
+                textDecoration: "none",
+                fontWeight: 700,
+              }}
               onClick={(e) => { e.stopPropagation(); if (isOwner && status === "pending") setStatus("applied"); }}
             >
               <span className="shrink-hide">Open Link </span>↗
@@ -506,9 +622,10 @@ export default function JobCard({ job, showCopy = true, isOwner = false, onDelet
               href={`/job?id=${encodeURIComponent(job.id)}`}
               onClick={(e) => e.stopPropagation()}
               style={{
-                background: "transparent", color: "var(--ink,#201d1d)",
+                ...footerBtnBase,
+                background: "transparent",
+                color: "var(--ink,#201d1d)",
                 border: "1px solid var(--hairline,#e2dede)",
-                padding: "5px 12px", borderRadius: 3, fontSize: 12, fontWeight: 600,
                 textDecoration: "none",
               }}
             >
@@ -517,7 +634,13 @@ export default function JobCard({ job, showCopy = true, isOwner = false, onDelet
           )}
           {showCopy && !isOwner && (
             <button onClick={(e) => { e.stopPropagation(); handleCopy(); }} disabled={copying || hasCopied}
-              style={{ background: hasCopied ? "#f0faf4" : "#fff", color: hasCopied ? "#1a7a3c" : "var(--ink,#201d1d)", border: hasCopied ? "1px solid #b7eb8f" : "1px solid var(--ink,#201d1d)", padding: "5px 12px", borderRadius: 3, fontSize: 12, fontWeight: 600, cursor: (copying || hasCopied) ? "default" : "pointer" }}
+              style={{
+                ...footerBtnBase,
+                background: hasCopied ? "#f0faf4" : "#fff",
+                color: hasCopied ? "#1a7a3c" : "var(--ink,#201d1d)",
+                border: hasCopied ? "1px solid #b7eb8f" : "1px solid var(--ink,#201d1d)",
+                cursor: (copying || hasCopied) ? "default" : "pointer",
+              }}
             >
               {copying ? "..." : hasCopied ? <><span className="shrink-hide">Copied </span>✓</> : <>+<span className="shrink-hide"> Copy Job</span></>}
             </button>
@@ -526,10 +649,10 @@ export default function JobCard({ job, showCopy = true, isOwner = false, onDelet
             <button
               onClick={openEdit}
               style={{
-                background: "transparent", color: "var(--ink,#201d1d)",
+                ...footerBtnBase,
+                background: "transparent",
+                color: "var(--ink,#201d1d)",
                 border: "1px solid var(--hairline,#e2dede)",
-                padding: "5px 10px", borderRadius: 3, fontSize: 12, fontWeight: 600,
-                cursor: "pointer", fontFamily: "inherit",
               }}
             >
               Edit
@@ -537,7 +660,12 @@ export default function JobCard({ job, showCopy = true, isOwner = false, onDelet
           )}
           {isOwner && onDelete && (
             <button onClick={(e) => { e.stopPropagation(); onDelete(job.id); }}
-              style={{ background: "transparent", color: "#c0392b", border: "1px solid #e0a8a8", padding: "5px 10px", borderRadius: 3, fontSize: 12, cursor: "pointer", fontFamily: "inherit" }}
+              style={{
+                ...footerBtnBase,
+                background: "transparent",
+                color: "#c0392b",
+                border: "1px solid #e0a8a8",
+              }}
             >
               ✕<span className="shrink-hide"> Delete</span>
             </button>

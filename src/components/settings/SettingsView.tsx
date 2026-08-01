@@ -34,7 +34,7 @@ export default function SettingsView() {
         setProtection(value);
         if (value) setNextQuestion(value.question);
       })
-      .catch(() => { if (active) showToast("Deletion protection load nahi ho payi.", "error"); })
+      .catch(() => { if (active) showToast("One Password load nahi ho paya.", "error"); })
       .finally(() => { if (active) setProtectionLoading(false); });
     return () => { active = false; };
   }, [auth.user]);
@@ -50,7 +50,7 @@ export default function SettingsView() {
       setNextQuestion(configured?.question ?? "");
       setQuestion("");
       setAnswer("");
-      showToast("Deletion protection set ho gayi.", "success");
+      showToast("One Password set ho gaya.", "success");
     } catch (error) {
       showToast(deletionProtectionError(error), "error");
     } finally {
@@ -68,7 +68,7 @@ export default function SettingsView() {
       setProtection(updated);
       setCurrentAnswer("");
       setNextAnswer("");
-      showToast("Deletion question aur answer update ho gaye.", "success");
+      showToast("One Password update ho gaya.", "success");
     } catch (error) {
       showToast(deletionProtectionError(error), "error");
     } finally {
@@ -109,7 +109,7 @@ export default function SettingsView() {
 
       <div className="page-header">
         <h1 className="page-title">Settings</h1>
-        <p className="page-subtitle">Manage your account and preferences.</p>
+        <p className="page-subtitle">Manage your account, One Password, and preferences.</p>
       </div>
 
       <div className="settings-section">
@@ -192,10 +192,11 @@ export default function SettingsView() {
       </div>
 
       <div className="settings-section">
-        <div className="settings-section-title">Deletion Protection</div>
+        <div className="settings-section-title">One Password</div>
         <div style={{ padding: "12px 0", borderBottom: "1px solid var(--hairline)" }}>
           <p style={{ fontSize: 13, color: "var(--body)", lineHeight: 1.6, marginBottom: 14 }}>
-            Koi bhi standard ya Brute Force job delete karne se pehle yeh question poocha jayega. Yeh login password nahi hai; destructive deletion ke liye extra safeguard hai.
+            App-wide safeguard — job <b>edit</b>, <b>delete</b>, aur koi bhi protected action se pehle yahi ek question + answer maanga jayega.
+            Login password nahi hai. No PIN, no pattern — sirf <b>1 question</b> aur uska <b>1 answer</b>.
           </p>
 
           {protectionLoading ? (
@@ -205,7 +206,7 @@ export default function SettingsView() {
           ) : !protection ? (
             <form onSubmit={setupProtection} style={{ display: "flex", flexDirection: "column", gap: 14, maxWidth: 560 }}>
               <div className="form-group">
-                <label className="form-label">your deletion question</label>
+                <label className="form-label">your one question</label>
                 <input
                   className="form-input"
                   value={question}
@@ -215,28 +216,29 @@ export default function SettingsView() {
                 />
               </div>
               <div className="form-group">
-                <label className="form-label">answer</label>
+                <label className="form-label">your answer</label>
                 <input
                   className="form-input"
                   type="password"
                   autoComplete="new-password"
                   value={answer}
                   onChange={event => setAnswer(event.target.value)}
-                  placeholder="Your private answer"
+                  placeholder="Private answer — sirf tumhe pata ho"
                 />
-                <div className="form-hint">Answer case-insensitive hai; extra spaces normalize ho jayengi. Isse bhoolne par trusted admin recovery chahiye.</div>
+                <div className="form-hint">Answer case-insensitive hai; extra spaces normalize ho jayengi. Bhoolne par trusted admin recovery chahiye.</div>
               </div>
               <div>
                 <button type="submit" className="btn btn-primary" disabled={savingProtection || !question.trim() || !answer.trim()}>
-                  {savingProtection ? "Saving…" : "Set deletion protection"}
+                  {savingProtection ? "Saving…" : "Set One Password"}
                 </button>
               </div>
             </form>
           ) : (
             <div style={{ maxWidth: 560 }}>
               <div style={{ padding: 12, border: "1px solid #bbf7d0", borderRadius: 8, background: "#f0fdf4", marginBottom: 16 }}>
-                <div style={{ fontSize: 11, fontWeight: 700, color: "#15803d", textTransform: "uppercase", letterSpacing: "0.05em" }}>Protection active</div>
+                <div style={{ fontSize: 11, fontWeight: 700, color: "#15803d", textTransform: "uppercase", letterSpacing: "0.05em" }}>One Password active</div>
                 <div style={{ marginTop: 5, fontSize: 13, fontWeight: 650, color: "var(--ink)" }}>{protection.question}</div>
+                <div style={{ marginTop: 6, fontSize: 11, color: "#166534" }}>Edit · Delete · protected actions — isi answer se unlock</div>
               </div>
               <details>
                 <summary style={{ cursor: "pointer", fontSize: 13, fontWeight: 700, color: "var(--ink)" }}>Change question or answer</summary>
@@ -255,7 +257,7 @@ export default function SettingsView() {
                   </div>
                   <div>
                     <button type="submit" className="btn btn-primary" disabled={savingProtection || !currentAnswer.trim() || !nextQuestion.trim() || !nextAnswer.trim()}>
-                      {savingProtection ? "Verifying…" : "Verify current answer & change"}
+                      {savingProtection ? "Verifying…" : "Verify & update One Password"}
                     </button>
                   </div>
                 </form>

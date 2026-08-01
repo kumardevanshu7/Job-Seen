@@ -1,11 +1,14 @@
 import { useState } from "react";
 import {
-  updateJobFields,
+  updateJobFieldsWithAnswer,
   type EmploymentType,
   type JobCard,
 } from "../../lib/firestore";
 import { safeExternalUrl } from "../../lib/security";
+import { deletionProtectionError } from "../../lib/deletionProtection";
 import { showToast } from "../ui/Toast";
+import { useStore } from "@nanostores/react";
+import { $auth } from "../../stores/authStore";
 
 const ONLINE_VIA = ["Naukri.com", "LinkedIn", "Company Website", "Referral", "Others"];
 const WALKIN_VIA = ["Job hai", "Brute force", "By friend"];
@@ -69,11 +72,13 @@ function buildForm(job: JobCard) {
 
 interface Props {
   job: JobCard;
+  onePasswordAnswer: string;
   onClose: () => void;
   onSaved?: () => void;
 }
 
-export default function JobEditModal({ job, onClose, onSaved }: Props) {
+export default function JobEditModal({ job, onePasswordAnswer, onClose, onSaved }: Props) {
+  const auth = useStore($auth);
   const isWalkin = (job.jobType ?? "online") === "walkin";
   const viaOpts = isWalkin ? WALKIN_VIA : ONLINE_VIA;
   const [form, setForm] = useState(() => buildForm(job));
@@ -104,7 +109,9 @@ export default function JobEditModal({ job, onClose, onSaved }: Props) {
 
     setSaving(true);
     try {
-      await updateJobFields(job.id, {
+      if (!auth.user) throw new Error("Not logged in.");
+      if (!onePasswordAnswer.trim()) throw new Error("One Password answer missing hai.");
+      await updateJobFieldsWithAnswer(auth.user.uid, job.id, onePasswordAnswer, {
         company: form.company,
         role: form.role,
         location: form.location,
@@ -125,7 +132,7 @@ export default function JobEditModal({ job, onClose, onSaved }: Props) {
       onSaved?.();
       onClose();
     } catch (error: any) {
-      showToast(error?.message || "Update fail ho gaya.", "error");
+      showToast(deletionProtectionError(error) || error?.message || "Update fail ho gaya.", "error");
     } finally {
       setSaving(false);
     }

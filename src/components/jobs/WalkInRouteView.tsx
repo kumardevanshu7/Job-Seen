@@ -289,6 +289,8 @@ export default function WalkInRouteView() {
           uid={auth.user.uid}
           title="Delete this job?"
           targetLabel="This route job"
+          description="Delete se pehle Settings → One Password ka answer verify karo."
+          confirmLabel="Verify & delete"
           busy={deleteBusy}
           error={deleteError}
           onCancel={() => { if (!deleteBusy) { setDeleteTarget(null); setDeleteError(""); } }}

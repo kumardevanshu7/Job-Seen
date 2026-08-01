@@ -16,10 +16,10 @@ interface Props {
 
 export default function DeletionChallengeModal({
   uid,
-  title = "Confirm protected deletion",
+  title = "One Password required",
   targetLabel = "This item",
   description,
-  confirmLabel = "Verify & delete",
+  confirmLabel = "Verify & continue",
   confirmTone = "danger",
   busy = false,
   error,
@@ -36,7 +36,7 @@ export default function DeletionChallengeModal({
     let active = true;
     getDeletionQuestion(uid)
       .then(value => { if (active) setQuestion(value); })
-      .catch(() => { if (active) setLoadError("Deletion question load nahi ho paya."); })
+      .catch(() => { if (active) setLoadError("One Password load nahi ho paya."); })
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
   }, [uid]);
@@ -76,17 +76,17 @@ export default function DeletionChallengeModal({
         <div style={{ width: 42, height: 42, borderRadius: "50%", background: confirmTone === "danger" ? "#fee2e2" : "#eff6ff", color: confirmTone === "danger" ? "#dc2626" : "#1d4ed8", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, marginBottom: 14 }}>?</div>
         <h2 id="deletion-challenge-title" style={{ margin: "0 0 7px", fontSize: 17, color: "var(--ink)" }}>{title}</h2>
         <p style={{ margin: "0 0 16px", fontSize: 13, lineHeight: 1.55, color: "var(--mute)" }}>
-          {description || `${targetLabel} permanently delete hoga. Apna configured answer enter karo.`}
+          {description || `${targetLabel} ke liye Settings → One Password ka answer enter karo.`}
         </p>
 
         {loading ? (
           <div style={{ display: "flex", alignItems: "center", gap: 9, color: "var(--mute)", fontSize: 13, padding: "10px 0 18px" }}>
-            <div className="spinner" style={{ width: 14, height: 14 }} /> Loading protection…
+            <div className="spinner" style={{ width: 14, height: 14 }} /> Loading One Password…
           </div>
         ) : !question ? (
           <div style={{ padding: 14, borderRadius: 8, background: "#fff7ed", border: "1px solid #fed7aa", marginBottom: 18 }}>
-            <div style={{ fontSize: 13, color: "#9a3412", lineHeight: 1.5 }}>Deletion protection abhi setup nahi hai.</div>
-            <a href="/settings" style={{ display: "inline-block", marginTop: 8, fontSize: 13, fontWeight: 700, color: "#9a3412" }}>Open Settings →</a>
+            <div style={{ fontSize: 13, color: "#9a3412", lineHeight: 1.5 }}>One Password abhi setup nahi hai — Settings mein 1 question + 1 answer set karo.</div>
+            <a href="/settings" style={{ display: "inline-block", marginTop: 8, fontSize: 13, fontWeight: 700, color: "#9a3412" }}>Open Settings → One Password</a>
           </div>
         ) : (
           <form onSubmit={submit}>
@@ -101,7 +101,7 @@ export default function DeletionChallengeModal({
                 value={answer}
                 disabled={busy}
                 onChange={event => setAnswer(event.target.value)}
-                placeholder="Your answer"
+                placeholder="Your One Password answer"
                 style={{ flex: 1, fontFamily: "inherit" }}
               />
               <button type="button" className="btn btn-secondary" disabled={busy} onClick={() => setShowAnswer(value => !value)}>

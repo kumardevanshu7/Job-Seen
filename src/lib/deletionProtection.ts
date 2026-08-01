@@ -66,7 +66,7 @@ export async function configureDeletionProtection(
   const secretRef = doc(db, "deletionSecrets", uid);
 
   if ((await getDoc(questionRef)).exists()) {
-    throw new Error("Deletion protection pehle se configured hai. Change form use karo.");
+    throw new Error("One Password pehle se configured hai. Change form use karo.");
   }
 
   const batch = writeBatch(db);
@@ -221,10 +221,10 @@ export async function deleteBruteForceJobsWithAnswer(
 export function deletionProtectionError(error: unknown): string {
   const value = error as { code?: string; message?: string };
   if (value?.message === "NO_DELETION_QUESTION") {
-    return "Pehle Settings mein deletion protection setup karo.";
+    return "Pehle Settings → One Password setup karo (1 question + 1 answer).";
   }
   if (value?.code === "permission-denied" || value?.code === "firestore/permission-denied") {
     return "Answer galat hai, ya updated Firestore rules publish nahi hui hain.";
   }
-  return value?.message || "Verification fail ho gayi. Dobara try karo.";
+  return value?.message || "One Password verify nahi ho paya. Dobara try karo.";
 }

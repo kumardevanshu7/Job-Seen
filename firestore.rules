@@ -30,7 +30,34 @@ service cloud.firestore {
     }
 
     function httpsOrEmpty(value) {
-      return value is string && (value == '' || value.matches('^https://.*'));
+      return value is string && (
+        value == ''
+        || (
+          value.matches('^https://[A-Za-z0-9].*')
+          && !value.matches('^https://[^/]*@.*')
+          && value.size() <= 2048
+        )
+      );
+    }
+
+    function validBatchList(list) {
+      return list is list
+        && list.size() <= 30
+        && (list.size() == 0 || (list[0] is string && list[0].size() <= 50))
+        && (list.size() <= 1 || (list[1] is string && list[1].size() <= 50))
+        && (list.size() <= 2 || (list[2] is string && list[2].size() <= 50))
+        && (list.size() <= 3 || (list[3] is string && list[3].size() <= 50))
+        && (list.size() <= 4 || (list[4] is string && list[4].size() <= 50))
+        && (list.size() <= 5 || (list[5] is string && list[5].size() <= 50))
+        && (list.size() <= 6 || (list[6] is string && list[6].size() <= 50))
+        && (list.size() <= 7 || (list[7] is string && list[7].size() <= 50))
+        && (list.size() <= 8 || (list[8] is string && list[8].size() <= 50))
+        && (list.size() <= 9 || (list[9] is string && list[9].size() <= 50))
+        && (list.size() <= 10 || (list[10] is string && list[10].size() <= 50))
+        && (list.size() <= 11 || (list[11] is string && list[11].size() <= 50))
+        && (list.size() <= 12 || (list[12] is string && list[12].size() <= 50))
+        && (list.size() <= 13 || (list[13] is string && list[13].size() <= 50))
+        && (list.size() <= 14 || (list[14] is string && list[14].size() <= 50));
     }
 
     function validPhoto(value) {
@@ -110,6 +137,22 @@ service cloud.firestore {
         && getAfter(/databases/$(database)/documents/deletionProofs/$(request.auth.uid)/targets/$(proofId)).data.createdAt == request.time;
     }
 
+    function jobStatusOrRouteOnlyUpdate() {
+      return request.resource.data.diff(resource.data).affectedKeys()
+        .hasOnly(['status', 'appliedAt', 'statusUpdatedAt', 'reminderDismissedAt', 'cancelReason', 'onRoute', 'routeOrder', 'routeDate']);
+    }
+
+    function jobCopyPermissionOk() {
+      return !('copiedFromUID' in request.resource.data)
+        || request.resource.data.copiedFromUID == null
+        || (
+          exists(/databases/$(database)/documents/permissions/$(request.resource.data.copiedFromUID + '__to__' + request.auth.uid))
+          && get(/databases/$(database)/documents/permissions/$(request.resource.data.copiedFromUID + '__to__' + request.auth.uid)).data.canCopy == true
+          && get(/databases/$(database)/documents/permissions/$(request.resource.data.copiedFromUID + '__to__' + request.auth.uid)).data.ownerUID == request.resource.data.copiedFromUID
+          && get(/databases/$(database)/documents/permissions/$(request.resource.data.copiedFromUID + '__to__' + request.auth.uid)).data.granteeUID == request.auth.uid
+        );
+    }
+
     function validPublicProfile(data) {
       return data.keys().hasAll(['uid', 'username', 'displayName', 'photoURL', 'createdAt', 'updatedAt'])
         && data.keys().hasOnly(['uid', 'username', 'displayName', 'photoURL', 'createdAt', 'updatedAt'])
@@ -142,7 +185,7 @@ service cloud.firestore {
         && (!('mapLink' in data) || httpsOrEmpty(data.mapLink))
         && (!('appliedVia' in data) || (data.appliedVia is string && data.appliedVia.size() <= 80))
         && (!('appliedViaOther' in data) || (data.appliedViaOther is string && data.appliedViaOther.size() <= 80))
-        && (!('batch' in data) || (data.batch is list && data.batch.size() <= 30))
+        && (!('batch' in data) || validBatchList(data.batch))
         && (!('bond' in data) || (data.bond is string && data.bond.size() <= 100))
         && (!('cancelReason' in data) || (data.cancelReason is string && data.cancelReason.size() <= 500))
         && (!('nearestMetro' in data) || (data.nearestMetro is string && data.nearestMetro.size() <= 200))
@@ -183,7 +226,7 @@ service cloud.firestore {
         && data.company is string && data.company.size() >= 1 && data.company.size() <= 200
         && data.phone is string && data.phone.size() <= 30
         && data.location is string && data.location.size() >= 1 && data.location.size() <= 300
-        && data.mapLink is string && data.mapLink.matches('^https://.*')
+        && data.mapLink is string && data.mapLink.matches('^https://[A-Za-z0-9].*') && !data.mapLink.matches('^https://[^/]*@.*') && data.mapLink.size() <= 2048
         && data.role is string && data.role.size() >= 1 && data.role.size() <= 200
         && data.callOutcome in ['not_called', 'no_response', 'wrong_number', 'incoming_not_allowed', 'no_vacancies', 'not_connected', 'switched_off', 'resume_sent', 'success']
         && data.decision in ['pending', 'selected', 'rejected']
@@ -429,13 +472,21 @@ service cloud.firestore {
         && validJob(request.resource.data)
         && request.resource.data.ownerUID == request.auth.uid
         && request.resource.data.ownerUsername == get(/databases/$(database)/documents/publicProfiles/$(request.auth.uid)).data.username
-        && request.resource.data.createdAt == request.time;
+        && request.resource.data.createdAt == request.time
+        && jobCopyPermissionOk();
       allow update: if signedIn()
         && (resource.data.ownerUID == request.auth.uid || admin())
         && validJob(request.resource.data)
         && request.resource.data.ownerUID == resource.data.ownerUID
         && request.resource.data.ownerUsername == resource.data.ownerUsername
-        && request.resource.data.createdAt == resource.data.createdAt;
+        && request.resource.data.createdAt == resource.data.createdAt
+        && (!('copiedFromUID' in resource.data) || request.resource.data.copiedFromUID == resource.data.copiedFromUID)
+        && (!('copiedFromUsername' in resource.data) || request.resource.data.copiedFromUsername == resource.data.copiedFromUsername)
+        && (
+          admin()
+          || jobStatusOrRouteOnlyUpdate()
+          || validFreshDeletionProof('jobs', jobId + '_edit', 'jobs__' + jobId + '_edit')
+        );
       allow delete: if admin() || (
         signedIn()
         && resource.data.ownerUID == request.auth.uid
@@ -502,6 +553,18 @@ service cloud.firestore {
             && request.resource.data.decision in ['selected', 'rejected']
             && request.time >= resource.data.interviewAt
             && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['decision', 'statusHistory', 'updatedAt'])
+          )
+          || (
+            request.resource.data.callOutcome == resource.data.callOutcome
+            && request.resource.data.decision == resource.data.decision
+            && request.resource.data.successAt == resource.data.successAt
+            && request.resource.data.interviewMode == resource.data.interviewMode
+            && request.resource.data.interviewAt == resource.data.interviewAt
+            && request.resource.data.interviewRescheduledAt == resource.data.interviewRescheduledAt
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+              'company', 'phone', 'location', 'mapLink', 'role', 'updatedAt'
+            ])
+            && validFreshDeletionProof('bruteForceJobs', leadId + '_edit', 'bruteForceJobs__' + leadId + '_edit')
           )
         );
       allow delete: if admin() || (
@@ -600,6 +663,10 @@ service cloud.firestore {
         && (
           !('participants' in resource.data)
           || request.resource.data.participants == resource.data.participants
+        )
+        && (
+          !('lastSenderUID' in request.resource.data)
+          || request.resource.data.lastSenderUID == request.auth.uid
         );
       allow delete: if admin();
 

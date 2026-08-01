@@ -127,22 +127,9 @@ export default function HomeView() {
     }
   }
 
-  const today = new Date(); today.setHours(0, 0, 0, 0);
-  const yesterday = new Date(today); yesterday.setDate(yesterday.getDate() - 1);
-
   function jobDate(job: JobCardType): Date | null {
     if (dateBasis === "applied") return toDate(job.appliedAt);
     return toDate(job.createdAt);
-  }
-
-  function groupLabel(job: JobCardType): string {
-    const d = jobDate(job);
-    if (!d) return dateBasis === "applied" ? "Not applied yet" : "Earlier";
-    const x = new Date(d); x.setHours(0, 0, 0, 0);
-    if (dateFilter !== "all") return formatDayLabel(dateFilter);
-    if (x.getTime() === today.getTime()) return "Today";
-    if (x.getTime() === yesterday.getTime()) return "Yesterday";
-    return formatDayLabel(dayKey(x));
   }
 
   const availableDates = useMemo(() => {
@@ -155,7 +142,7 @@ export default function HomeView() {
     return Array.from(set).sort((a, b) => b.localeCompare(a));
   }, [jobs, dateBasis]);
 
-  const filteredJobs = jobs.filter(j => {
+  const filteredJobs = useMemo(() => jobs.filter(j => {
     if ((j.jobType ?? "online") === "walkin") return false;
     if (filterTab === "mine") { if (j.copiedFromUID) return false; }
     if (filterTab === "copied") { if (!j.copiedFromUID) return false; }
@@ -165,31 +152,77 @@ export default function HomeView() {
       if (dayKey(d) !== dateFilter) return false;
     }
     return true;
-  });
+  }), [jobs, filterTab, dateFilter, dateBasis]);
 
-  const grouped: Record<string, JobCardType[]> = {};
-  filteredJobs.forEach(j => {
-    const label = groupLabel(j);
-    if (!grouped[label]) grouped[label] = [];
-    grouped[label].push(j);
-  });
+  const { grouped, groupOrder } = useMemo(() => {
+    const map: Record<string, JobCardType[]> = {};
+    const keyRank = new Map<string, string>(); // label -> sortKey
+    filteredJobs.forEach(j => {
+      const d = jobDate(j);
+      let label: string;
+      let sortKey: string;
+      if (!d) {
+        label = dateBasis === "applied" ? "Not applied yet" : "Earlier";
+        sortKey = dateBasis === "applied" ? "9999-99-99" : "0000-00-00";
+      } else {
+        const x = new Date(d); x.setHours(0, 0, 0, 0);
+        const today = new Date(); today.setHours(0, 0, 0, 0);
+        const yesterday = new Date(today); yesterday.setDate(yesterday.getDate() - 1);
+        const dk = dayKey(x);
+        if (dateFilter !== "all") label = formatDayLabel(dateFilter);
+        else if (x.getTime() === today.getTime()) label = "Today";
+        else if (x.getTime() === yesterday.getTime()) label = "Yesterday";
+        else label = formatDayLabel(dk);
+        sortKey = dk;
+      }
+      if (!map[label]) map[label] = [];
+      map[label].push(j);
+      keyRank.set(label, sortKey);
+    });
+    const order = Object.keys(map).sort((a, b) => {
+      const rank = (label: string) => {
+        if (label === "Today") return 0;
+        if (label === "Yesterday") return 1;
+        if (label === "Not applied yet") return 999;
+        return 2;
+      };
+      const ra = rank(a); const rb = rank(b);
+      if (ra !== rb) return ra - rb;
+      return (keyRank.get(b) ?? "").localeCompare(keyRank.get(a) ?? "");
+    });
+    return { grouped: map, groupOrder: order };
+  }, [filteredJobs, dateBasis, dateFilter]);
 
-  const groupOrder = Object.keys(grouped).sort((a, b) => {
-    const rank = (label: string) => {
-      if (label === "Today") return 0;
-      if (label === "Yesterday") return 1;
-      if (label === "Not applied yet") return 999;
-      return 2;
-    };
-    const ra = rank(a); const rb = rank(b);
-    if (ra !== rb) return ra - rb;
-    // date labels newer first
-    try {
-      return new Date(b).getTime() - new Date(a).getTime();
-    } catch {
-      return a.localeCompare(b);
+  const LIST_PAGE = 24;
+  const [listLimit, setListLimit] = useState(LIST_PAGE);
+  useEffect(() => {
+    setListLimit(LIST_PAGE);
+  }, [filterTab, dateFilter, dateBasis, viewMode]);
+
+  const { limitedGrouped, limitedOrder, totalFiltered, shownCount } = useMemo(() => {
+    let count = 0;
+    const map: Record<string, JobCardType[]> = {};
+    const order: string[] = [];
+    for (const group of groupOrder) {
+      const items: JobCardType[] = [];
+      for (const job of grouped[group]) {
+        if (count >= listLimit) break;
+        items.push(job);
+        count++;
+      }
+      if (items.length) {
+        map[group] = items;
+        order.push(group);
+      }
+      if (count >= listLimit) break;
     }
-  });
+    return {
+      limitedGrouped: map,
+      limitedOrder: order,
+      totalFiltered: filteredJobs.length,
+      shownCount: count,
+    };
+  }, [grouped, groupOrder, listLimit, filteredJobs.length]);
 
   return (
     <>
@@ -200,6 +233,8 @@ export default function HomeView() {
           uid={auth.user.uid}
           title="Delete this job?"
           targetLabel="This job"
+          description="Delete se pehle Settings → One Password ka answer verify karo."
+          confirmLabel="Verify & delete"
           busy={deleteBusy}
           error={deleteError}
           onCancel={() => { if (!deleteBusy) { setDeleteTarget(null); setDeleteError(""); } }}
@@ -446,7 +481,7 @@ export default function HomeView() {
         </div>
       ) : (
         <div>
-          {groupOrder.map(group => (
+          {limitedOrder.map(group => (
             <div key={group} style={{ marginBottom: 24 }}>
               <div style={{
                 fontSize: 12,
@@ -459,7 +494,7 @@ export default function HomeView() {
                 {group}
               </div>
               <div className={`job-list ${viewMode !== "list" ? `job-list-grid ${viewMode}` : ""}`}>
-                {grouped[group].map((job, i) => (
+                {limitedGrouped[group].map((job, i) => (
                   <JobCard
                     key={job.id}
                     job={job}
@@ -473,6 +508,17 @@ export default function HomeView() {
               </div>
             </div>
           ))}
+
+          {shownCount < totalFiltered && (
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={() => setListLimit(n => n + LIST_PAGE)}
+              style={{ width: "100%", maxWidth: 420, marginBottom: 16 }}
+            >
+              Load more ({shownCount}/{totalFiltered})
+            </button>
+          )}
 
           <a href="/add-job" className="add-btn-row" style={{ textDecoration: "none", marginTop: 4 }}>
             <span className="add-btn-plus">+</span>

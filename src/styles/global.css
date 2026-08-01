@@ -337,7 +337,7 @@ body {
   padding-top: 14px;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 16px;
 }
 
 .job-row {
@@ -1001,6 +1001,8 @@ body {
 /* Job Card Container Query to hide less important info on shrink */
 .job-card {
   container-type: inline-size;
+  content-visibility: auto;
+  contain-intrinsic-size: auto 280px;
 }
 @container (max-width: 280px) {
   .shrink-hide {
