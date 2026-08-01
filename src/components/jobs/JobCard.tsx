@@ -6,6 +6,9 @@ import type { JobCard as JobCardType, JobStatus } from "../../lib/firestore";
 import { showToast } from "../ui/Toast";
 import { serverTimestamp } from "firebase/firestore";
 import ReasonModal from "../ui/ReasonModal";
+import DeletionChallengeModal from "../ui/DeletionChallengeModal";
+import JobEditModal from "./JobEditModal";
+import { deletionProtectionError, verifyDeletionAnswer } from "../../lib/deletionProtection";
 import { safeExternalUrl } from "../../lib/security";
 import { WALK_IN_ENABLED } from "../../lib/features";
 
@@ -83,6 +86,10 @@ export default function JobCard({ job, showCopy = true, isOwner = false, onDelet
   const [localStatus, setLocalStatus] = useState<JobStatus>(job.status ?? "pending");
   const [showCancelReason, setShowCancelReason] = useState(false);
   const [onRoute, setOnRoute] = useState(isOnWalkInRoute(job));
+  const [editChallengeOpen, setEditChallengeOpen] = useState(false);
+  const [editUnlocked, setEditUnlocked] = useState(false);
+  const [editBusy, setEditBusy] = useState(false);
+  const [editError, setEditError] = useState("");
 
   // keep local flags in sync with live firestore updates
   useEffect(() => {
@@ -168,6 +175,28 @@ export default function JobCard({ job, showCopy = true, isOwner = false, onDelet
     }
   }
 
+  function openEdit(e: React.MouseEvent) {
+    e.stopPropagation();
+    if (!isOwner || !auth.user) return;
+    setEditError("");
+    setEditChallengeOpen(true);
+  }
+
+  async function confirmEditUnlock(answer: string) {
+    if (!auth.user) return;
+    setEditBusy(true);
+    setEditError("");
+    try {
+      await verifyDeletionAnswer(auth.user.uid, answer, `edit_${job.id}`);
+      setEditChallengeOpen(false);
+      setEditUnlocked(true);
+    } catch (error) {
+      setEditError(deletionProtectionError(error));
+    } finally {
+      setEditBusy(false);
+    }
+  }
+
   return (
     <>
     {showCancelReason && (
@@ -180,6 +209,25 @@ export default function JobCard({ job, showCopy = true, isOwner = false, onDelet
           setShowCancelReason(false);
           await setStatus("cancelled", { cancelReason: reason });
         }}
+      />
+    )}
+    {editChallengeOpen && auth.user && (
+      <DeletionChallengeModal
+        uid={auth.user.uid}
+        title="Edit this job?"
+        description="Job edit karne se pehle Settings wala deletion-protection answer verify karo."
+        confirmLabel="Verify & edit"
+        confirmTone="primary"
+        busy={editBusy}
+        error={editError}
+        onCancel={() => { if (!editBusy) { setEditChallengeOpen(false); setEditError(""); } }}
+        onConfirm={confirmEditUnlock}
+      />
+    )}
+    {editUnlocked && (
+      <JobEditModal
+        job={job}
+        onClose={() => setEditUnlocked(false)}
       />
     )}
     <div
@@ -271,7 +319,9 @@ export default function JobCard({ job, showCopy = true, isOwner = false, onDelet
         )}
         {job.employmentType === "internship" && job.internshipMonths && (
           <span style={{ background: "#f5f3ff", border: "1px solid #ddd6fe", color: "#6d28d9", fontSize: 11, padding: "3px 8px", borderRadius: 3 }}>
-            {job.internshipMonths} mo
+            {/^\d+(\.\d+)?$/.test(job.internshipMonths.trim())
+              ? `${job.internshipMonths} mo`
+              : job.internshipMonths}
           </span>
         )}
         {job.employmentType === "internship" && job.ppo && (
@@ -470,6 +520,19 @@ export default function JobCard({ job, showCopy = true, isOwner = false, onDelet
               style={{ background: hasCopied ? "#f0faf4" : "#fff", color: hasCopied ? "#1a7a3c" : "var(--ink,#201d1d)", border: hasCopied ? "1px solid #b7eb8f" : "1px solid var(--ink,#201d1d)", padding: "5px 12px", borderRadius: 3, fontSize: 12, fontWeight: 600, cursor: (copying || hasCopied) ? "default" : "pointer" }}
             >
               {copying ? "..." : hasCopied ? <><span className="shrink-hide">Copied </span>✓</> : <>+<span className="shrink-hide"> Copy Job</span></>}
+            </button>
+          )}
+          {isOwner && (
+            <button
+              onClick={openEdit}
+              style={{
+                background: "transparent", color: "var(--ink,#201d1d)",
+                border: "1px solid var(--hairline,#e2dede)",
+                padding: "5px 10px", borderRadius: 3, fontSize: 12, fontWeight: 600,
+                cursor: "pointer", fontFamily: "inherit",
+              }}
+            >
+              Edit
             </button>
           )}
           {isOwner && onDelete && (

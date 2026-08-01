@@ -20,6 +20,19 @@ const PPO_OPTS = [
   { value: "no", label: "No PPO" },
   { value: "maybe", label: "Maybe / based on performance" },
 ];
+const INTERNSHIP_DURATION_OPTS = [
+  { value: "not sure", label: "Not sure" },
+  { value: "1", label: "1 month" },
+  { value: "2", label: "2 months" },
+  { value: "3", label: "3 months" },
+  { value: "4", label: "4 months" },
+  { value: "5", label: "5 months" },
+  { value: "6", label: "6 months" },
+  { value: "12", label: "12 months" },
+];
+const LAST_DATE_NA = "N/A";
+const CTC_NA = "N/A";
+const BOND_NA = "N/A";
 
 interface OnlineForm {
   company: string; location: string; applyLink: string;
@@ -161,14 +174,17 @@ export default function JobForm() {
             <div className="two-col">
               <div className="form-group">
                 <label className="form-label">duration (months)</label>
-                <input
-                  className="form-input"
-                  inputMode="numeric"
-                  placeholder="e.g. 3, 6"
+                <select
+                  className="form-select"
                   value={months}
-                  onChange={e => onChange("internshipMonths", e.target.value.replace(/[^\d.]/g, "").slice(0, 4))}
+                  onChange={e => onChange("internshipMonths", e.target.value)}
                   style={inputStyle}
-                />
+                >
+                  <option value="" disabled>Select duration…</option>
+                  {INTERNSHIP_DURATION_OPTS.map(o => (
+                    <option key={o.value} value={o.value}>{o.label}</option>
+                  ))}
+                </select>
               </div>
               <div className="form-group">
                 <label className="form-label">PPO offer?</label>
@@ -215,7 +231,7 @@ export default function JobForm() {
         appliedViaOther: online.appliedVia === "Others" ? online.appliedViaOther.trim() : "",
         ctc: online.ctc.trim(),
         role: online.role.trim(),
-        lastDate: online.lastDate ? new Date(online.lastDate) : null,
+        lastDate: online.lastDate && online.lastDate !== LAST_DATE_NA ? new Date(online.lastDate) : null,
         bond: online.bond.trim(),
         batch: online.batch.split(",").map(b => b.trim()).filter(Boolean),
         mapLink: "",
@@ -474,14 +490,26 @@ export default function JobForm() {
                 <label className="form-label">
                   {online.employmentType === "internship" ? "stipend / ctc" : "ctc"}
                 </label>
-                <input
-                  className="form-input"
-                  list="suggest-ctc"
-                  placeholder={online.employmentType === "internship" ? "₹15–20k /month" : "6 LPA, ₹8–10 LPA"}
-                  value={online.ctc}
-                  onChange={e => setO("ctc", e.target.value)}
-                  style={inputStyle}
-                />
+                <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+                  <input
+                    className="form-input"
+                    list="suggest-ctc"
+                    placeholder={online.employmentType === "internship" ? "₹15–20k /month" : "6 LPA, ₹8–10 LPA"}
+                    value={online.ctc === CTC_NA ? "" : online.ctc}
+                    disabled={online.ctc === CTC_NA}
+                    onChange={e => setO("ctc", e.target.value)}
+                    style={{ ...inputStyle, flex: 1, minWidth: 140, opacity: online.ctc === CTC_NA ? 0.45 : 1 }}
+                  />
+                  <label style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12, fontWeight: 600, color: "var(--body)", cursor: "pointer", fontFamily: "inherit" }}>
+                    <input
+                      type="checkbox"
+                      checked={online.ctc === CTC_NA}
+                      onChange={e => setO("ctc", e.target.checked ? CTC_NA : "")}
+                      style={{ width: 14, height: 14, accentColor: "var(--ink)" }}
+                    />
+                    N/A
+                  </label>
+                </div>
               </div>
             </div>
 
@@ -500,13 +528,49 @@ export default function JobForm() {
               </div>
               <div className="form-group">
                 <label className="form-label">bond</label>
-                <input className="form-input" placeholder="2 Years / No Bond" value={online.bond} onChange={e => setO("bond", e.target.value)} style={inputStyle} />
+                <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+                  <input
+                    className="form-input"
+                    placeholder="2 Years / No Bond"
+                    value={online.bond === BOND_NA ? "" : online.bond}
+                    disabled={online.bond === BOND_NA}
+                    onChange={e => setO("bond", e.target.value)}
+                    style={{ ...inputStyle, flex: 1, minWidth: 140, opacity: online.bond === BOND_NA ? 0.45 : 1 }}
+                  />
+                  <label style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12, fontWeight: 600, color: "var(--body)", cursor: "pointer", fontFamily: "inherit" }}>
+                    <input
+                      type="checkbox"
+                      checked={online.bond === BOND_NA}
+                      onChange={e => setO("bond", e.target.checked ? BOND_NA : "")}
+                      style={{ width: 14, height: 14, accentColor: "var(--ink)" }}
+                    />
+                    N/A
+                  </label>
+                </div>
               </div>
             </div>
 
-            <div className="form-group" style={{ maxWidth: 220 }}>
+            <div className="form-group" style={{ maxWidth: 280 }}>
               <label className="form-label">last date</label>
-              <input className="form-input" type="date" value={online.lastDate} onChange={e => setO("lastDate", e.target.value)} style={{ ...inputStyle, colorScheme: "light" }} />
+              <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+                <input
+                  className="form-input"
+                  type="date"
+                  value={online.lastDate === LAST_DATE_NA ? "" : online.lastDate}
+                  disabled={online.lastDate === LAST_DATE_NA}
+                  onChange={e => setO("lastDate", e.target.value)}
+                  style={{ ...inputStyle, colorScheme: "light", maxWidth: 180, opacity: online.lastDate === LAST_DATE_NA ? 0.45 : 1 }}
+                />
+                <label style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12, fontWeight: 600, color: "var(--body)", cursor: "pointer", fontFamily: "inherit" }}>
+                  <input
+                    type="checkbox"
+                    checked={online.lastDate === LAST_DATE_NA}
+                    onChange={e => setO("lastDate", e.target.checked ? LAST_DATE_NA : "")}
+                    style={{ width: 14, height: 14, accentColor: "var(--ink)" }}
+                  />
+                  N/A
+                </label>
+              </div>
             </div>
 
             <div style={{ display: "flex", gap: 10, paddingTop: 4 }}>
@@ -582,13 +646,25 @@ export default function JobForm() {
                   {walkin.employmentType === "internship" ? "stipend / ctc" : "ctc"}{" "}
                   <span style={{ color: "var(--mute)", fontWeight: 500 }}>(if available)</span>
                 </label>
-                <input
-                  className="form-input"
-                  placeholder={walkin.employmentType === "internship" ? "₹15–20k /month" : "6 LPA, ₹8–10 LPA"}
-                  value={walkin.ctc}
-                  onChange={e => setW("ctc", e.target.value)}
-                  style={inputStyle}
-                />
+                <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+                  <input
+                    className="form-input"
+                    placeholder={walkin.employmentType === "internship" ? "₹15–20k /month" : "6 LPA, ₹8–10 LPA"}
+                    value={walkin.ctc === CTC_NA ? "" : walkin.ctc}
+                    disabled={walkin.ctc === CTC_NA}
+                    onChange={e => setW("ctc", e.target.value)}
+                    style={{ ...inputStyle, flex: 1, minWidth: 140, opacity: walkin.ctc === CTC_NA ? 0.45 : 1 }}
+                  />
+                  <label style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12, fontWeight: 600, color: "var(--body)", cursor: "pointer", fontFamily: "inherit" }}>
+                    <input
+                      type="checkbox"
+                      checked={walkin.ctc === CTC_NA}
+                      onChange={e => setW("ctc", e.target.checked ? CTC_NA : "")}
+                      style={{ width: 14, height: 14, accentColor: "var(--ink)" }}
+                    />
+                    N/A
+                  </label>
+                </div>
               </div>
             </div>
 
@@ -599,7 +675,25 @@ export default function JobForm() {
               </div>
               <div className="form-group">
                 <label className="form-label">bond <span style={{ color: "var(--mute)", fontWeight: 500 }}>(optional)</span></label>
-                <input className="form-input" placeholder="2 Years / No Bond" value={walkin.bond} onChange={e => setW("bond", e.target.value)} style={inputStyle} />
+                <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+                  <input
+                    className="form-input"
+                    placeholder="2 Years / No Bond"
+                    value={walkin.bond === BOND_NA ? "" : walkin.bond}
+                    disabled={walkin.bond === BOND_NA}
+                    onChange={e => setW("bond", e.target.value)}
+                    style={{ ...inputStyle, flex: 1, minWidth: 140, opacity: walkin.bond === BOND_NA ? 0.45 : 1 }}
+                  />
+                  <label style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12, fontWeight: 600, color: "var(--body)", cursor: "pointer", fontFamily: "inherit" }}>
+                    <input
+                      type="checkbox"
+                      checked={walkin.bond === BOND_NA}
+                      onChange={e => setW("bond", e.target.checked ? BOND_NA : "")}
+                      style={{ width: 14, height: 14, accentColor: "var(--ink)" }}
+                    />
+                    N/A
+                  </label>
+                </div>
               </div>
             </div>
 

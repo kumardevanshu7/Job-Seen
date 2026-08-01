@@ -46,6 +46,7 @@ const BRUTE_META: Record<string, { label: string; color: string; bg: string; bor
   incoming_not_allowed: { label: "Incoming not allowed", color: "#9f1239", bg: "#fff1f2", border: "#fda4af" },
   no_vacancies:         { label: "Call picked but no vacancies there", color: "#7c2d12", bg: "linear-gradient(90deg,#dcfce7,#fee2e2)", border: "#fbcfe8" },
   not_connected:        { label: "Not Connected - Try Again", color: "#ea580c", bg: "#fff7ed", border: "#fed7aa" },
+  switched_off:         { label: "Switched off",         color: "#475569", bg: "linear-gradient(90deg,#e5e7eb,#ffffff,#f3f4f6)", border: "#d1d5db" },
   resume_sent:          { label: "Resume sent (hold)",   color: "#ca8a04", bg: "#fefce8", border: "#fde68a" },
   success:              { label: "Interview scheduled",  color: "#16a34a", bg: "#f0fdf4", border: "#bbf7d0" },
   selected:             { label: "Selected",             color: "#2563eb", bg: "#eff6ff", border: "#bfdbfe" },

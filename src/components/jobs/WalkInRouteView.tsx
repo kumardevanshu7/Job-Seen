@@ -652,7 +652,11 @@ export default function WalkInRouteView() {
                       </span>
                     )}
                     {job.employmentType === "internship" && job.internshipMonths && (
-                      <span>{job.internshipMonths} mo</span>
+                      <span>
+                        {/^\d+(\.\d+)?$/.test(job.internshipMonths.trim())
+                          ? `${job.internshipMonths} mo`
+                          : job.internshipMonths}
+                      </span>
                     )}
                     {job.employmentType === "internship" && job.ppo && (
                       <span>PPO: {job.ppo}</span>

@@ -185,7 +185,7 @@ service cloud.firestore {
         && data.location is string && data.location.size() >= 1 && data.location.size() <= 300
         && data.mapLink is string && data.mapLink.matches('^https://.*')
         && data.role is string && data.role.size() >= 1 && data.role.size() <= 200
-        && data.callOutcome in ['not_called', 'no_response', 'wrong_number', 'incoming_not_allowed', 'no_vacancies', 'not_connected', 'resume_sent', 'success']
+        && data.callOutcome in ['not_called', 'no_response', 'wrong_number', 'incoming_not_allowed', 'no_vacancies', 'not_connected', 'switched_off', 'resume_sent', 'success']
         && data.decision in ['pending', 'selected', 'rejected']
         && (data.successAt == null || data.successAt is timestamp)
         && (data.interviewMode == null || data.interviewMode in ['offline', 'online'])

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useStore } from "@nanostores/react";
 import { $auth } from "../../stores/authStore";
 import {
@@ -51,6 +51,13 @@ const STATUS_STYLES: Record<DisplayStatus, StatusMeta> = {
     dot: "linear-gradient(90deg, #16a34a 0%, #dc2626 100%)",
   },
   not_connected: { label: "Not Connected - Try Again", color: "#ea580c", bg: "#fff7ed", border: "#fed7aa" },
+  switched_off: {
+    label: "Switched off",
+    color: "#475569",
+    bg: "linear-gradient(90deg, #e5e7eb 0%, #ffffff 55%, #f3f4f6 100%)",
+    border: "#d1d5db",
+    dot: "linear-gradient(90deg, #6b7280 0%, #e5e7eb 100%)",
+  },
   resume_sent: { label: "Resume sent (hold)", color: "#ca8a04", bg: "#fefce8", border: "#fde68a" },
   success: { label: "Success — interview scheduled", color: "#16a34a", bg: "#f0fdf4", border: "#bbf7d0" },
   selected: { label: "Selected", color: "#2563eb", bg: "#eff6ff", border: "#bfdbfe" },
@@ -67,6 +74,7 @@ const STATUS_REASON: Record<DisplayStatus, string> = {
   incoming_not_allowed: "Dark crimson — incoming band",
   no_vacancies: "Green + red — call laga (green) par vacancy nahi (red)",
   not_connected: "Orange — call connect nahi hua, dobara try karo",
+  switched_off: "Grey + white mix — phone switched off",
   resume_sent: "Yellow — resume bheja, hold pe",
   success: "Green — interview scheduled",
   selected: "Blue — selected",
@@ -74,13 +82,17 @@ const STATUS_REASON: Record<DisplayStatus, string> = {
 };
 
 const OUTCOME_VALUES: BruteForceCallOutcome[] = [
-  "not_called", "no_response", "wrong_number", "incoming_not_allowed", "no_vacancies", "not_connected", "resume_sent", "success",
+  "not_called", "no_response", "wrong_number", "incoming_not_allowed", "no_vacancies", "not_connected", "switched_off", "resume_sent", "success",
 ];
 const OUTCOMES = OUTCOME_VALUES.map(value => ({ value, ...STATUS_STYLES[value] }));
 const STATUS_LEGEND: DisplayStatus[] = [
-  "not_called", "no_response", "wrong_number", "incoming_not_allowed", "no_vacancies", "not_connected", "resume_sent", "success", "selected", "rejected",
+  "not_called", "no_response", "wrong_number", "incoming_not_allowed", "no_vacancies", "not_connected", "switched_off", "resume_sent", "success", "selected", "rejected",
 ];
 
+function displayStatusOf(lead: BruteForceJob): DisplayStatus {
+  if (lead.decision === "selected" || lead.decision === "rejected") return lead.decision;
+  return lead.callOutcome;
+}
 const INITIAL_FORM = { company: "", phone: "", location: "", mapLink: "", role: "" };
 const MAX_IMPORT_FILE_BYTES = 1024 * 1024;
 const MAX_IMPORT_ROWS = 100;
@@ -427,11 +439,12 @@ function dateKeyFromDate(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
-function nextRouteDates(count = 10): string[] {
+function nextRouteDates(past = 14, future = 9): string[] {
   const base = new Date();
-  return Array.from({ length: count }, (_, i) => {
+  return Array.from({ length: past + future + 1 }, (_, i) => {
+    const offset = i - past;
     const d = new Date(base);
-    d.setDate(base.getDate() + i);
+    d.setDate(base.getDate() + offset);
     return dateKeyFromDate(d);
   });
 }
@@ -442,6 +455,8 @@ function routeDateLabel(key: string): string {
   if (key === dateKeyFromDate(new Date())) return "Today";
   const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1);
   if (key === dateKeyFromDate(tomorrow)) return "Tomorrow";
+  const yesterday = new Date(); yesterday.setDate(yesterday.getDate() - 1);
+  if (key === dateKeyFromDate(yesterday)) return "Yesterday";
   return date.toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short" });
 }
 
@@ -466,7 +481,10 @@ export default function BruteForceJobsView() {
   const [bulkDeleteError, setBulkDeleteError] = useState("");
   const [selectedRouteDate, setSelectedRouteDate] = useState<string>(() => dateKeyFromDate(new Date()));
   const [leadSearch, setLeadSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState<DisplayStatus | null>(null);
   const [now, setNow] = useState(Date.now());
+  const todayChipRef = useRef<HTMLButtonElement | null>(null);
+  const didScrollToday = useRef(false);
 
   const [scheduleId, setScheduleId] = useState<string | null>(null);
   const [scheduleAction, setScheduleAction] = useState<"success" | "reschedule">("success");
@@ -498,10 +516,23 @@ export default function BruteForceJobsView() {
     return () => clearInterval(interval);
   }, []);
 
+  useEffect(() => {
+    if (didScrollToday.current || !todayChipRef.current) return;
+    didScrollToday.current = true;
+    todayChipRef.current.scrollIntoView({ inline: "center", block: "nearest", behavior: "auto" });
+  }, [leads.length]);
+
   const dayLeads = useMemo(
     () => leads.filter(lead => dateKeyFromDate(new Date(toMillis(lead.createdAt))) === selectedRouteDate),
     [leads, selectedRouteDate]
   );
+  const statusCounts = useMemo(() => {
+    const counts = Object.fromEntries(STATUS_LEGEND.map(key => [key, 0])) as Record<DisplayStatus, number>;
+    dayLeads.forEach(lead => {
+      counts[displayStatusOf(lead)] += 1;
+    });
+    return counts;
+  }, [dayLeads]);
   const active = useMemo(() => dayLeads.filter(lead => lead.decision === "pending"), [dayLeads]);
   const selected = useMemo(() => dayLeads.filter(lead => lead.decision === "selected"), [dayLeads]);
   const rejected = useMemo(() => dayLeads.filter(lead => lead.decision === "rejected"), [dayLeads]);
@@ -530,13 +561,25 @@ export default function BruteForceJobsView() {
   ];
   const rawVisibleSection = sections.find(section => section.id === activeSection) ?? sections[0];
   const searchQuery = leadSearch.trim().toLowerCase();
+  const sectionBaseItems = statusFilter
+    ? dayLeads.filter(lead => displayStatusOf(lead) === statusFilter)
+    : rawVisibleSection.items;
   const shownItems = searchQuery
-    ? rawVisibleSection.items.filter(lead =>
+    ? sectionBaseItems.filter(lead =>
         [lead.company, lead.role, lead.location, lead.phone]
           .some(v => (v ?? "").toLowerCase().includes(searchQuery))
       )
-    : rawVisibleSection.items;
-  const visibleSection = { ...rawVisibleSection, items: shownItems };
+    : sectionBaseItems;
+  const visibleSection = {
+    ...rawVisibleSection,
+    items: shownItems,
+    emptyTitle: statusFilter
+      ? `Is din koi “${STATUS_STYLES[statusFilter].label}” lead nahi`
+      : rawVisibleSection.emptyTitle,
+    emptyText: statusFilter
+      ? "Koi aur status chip choose karo, ya filter clear karo."
+      : rawVisibleSection.emptyText,
+  };
   const visibleLeadIds = shownItems.map(lead => lead.id);
   const allVisibleSelected = visibleLeadIds.length > 0 && visibleLeadIds.every(id => selectedLeadIds.has(id));
 
@@ -932,37 +975,79 @@ export default function BruteForceJobsView() {
       </div>
 
       <div style={{ marginBottom: 26 }}>
-        <div className="section-label" style={{ marginBottom: 12 }}>Status color guide</div>
+        <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12, flexWrap: "wrap", marginBottom: 12 }}>
+          <div className="section-label" style={{ marginBottom: 0 }}>Status filter</div>
+          <div style={{ fontSize: 11, color: "var(--mute)" }}>
+            Numbers = selected date ke leads. Chip tap = filter{statusFilter ? " · " : ""}
+            {statusFilter && (
+              <button
+                type="button"
+                onClick={() => setStatusFilter(null)}
+                style={{ background: "none", border: "none", padding: 0, color: "var(--ink)", fontWeight: 700, cursor: "pointer", fontFamily: "inherit", fontSize: 11 }}
+              >
+                Clear filter
+              </button>
+            )}
+          </div>
+        </div>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
           {STATUS_LEGEND.map(statusKey => {
             const item = STATUS_STYLES[statusKey];
+            const count = statusCounts[statusKey];
+            const isActive = statusFilter === statusKey;
             return (
-              <span
+              <button
                 key={statusKey}
+                type="button"
+                title={STATUS_REASON[statusKey]}
+                onClick={() => setStatusFilter(prev => (prev === statusKey ? null : statusKey))}
                 style={{
                   display: "inline-flex",
                   alignItems: "center",
                   gap: 7,
                   color: item.color,
                   background: item.bg,
-                  border: `1px solid ${item.border}`,
+                  border: `1.5px solid ${isActive ? item.color : item.border}`,
+                  boxShadow: isActive ? `0 0 0 2px ${item.border}` : "none",
                   borderRadius: 999,
                   padding: "6px 10px",
                   fontSize: 11,
                   fontWeight: 700,
+                  cursor: "pointer",
+                  fontFamily: "inherit",
+                  opacity: statusFilter && !isActive ? 0.55 : 1,
                 }}
               >
                 <span
                   aria-hidden="true"
                   style={{ width: 8, height: 8, borderRadius: "50%", background: item.dot ?? item.color, flexShrink: 0 }}
                 />
-                <span title={STATUS_REASON[statusKey]}>{item.label}</span>
-              </span>
+                <span>{item.label}</span>
+                <span
+                  style={{
+                    minWidth: 18,
+                    height: 18,
+                    padding: "0 5px",
+                    borderRadius: 999,
+                    background: isActive ? item.color : "rgba(0,0,0,0.06)",
+                    color: isActive ? "#fff" : item.color,
+                    display: "inline-flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    fontSize: 10,
+                    fontWeight: 800,
+                    lineHeight: 1,
+                  }}
+                >
+                  {count}
+                </span>
+              </button>
             );
           })}
         </div>
       </div>
 
+      {!statusFilter && (
       <div className="form-card" style={{ marginBottom: 20, maxWidth: 620 }}>
         <div style={{ fontSize: 15, fontWeight: 750, color: "var(--ink)" }}>Import jobs from JSON</div>
         <p className="form-hint" style={{ marginTop: 6 }}>
@@ -1030,7 +1115,9 @@ export default function BruteForceJobsView() {
           </div>
         </div>
       </div>
+      )}
 
+      {!statusFilter && (
       <form onSubmit={handleCreate} className="form-card" style={{ marginBottom: 32, maxWidth: 620 }}>
         <div className="two-col">
           <div className="form-group">
@@ -1061,6 +1148,7 @@ export default function BruteForceJobsView() {
           {creating ? <><div className="spinner spinner-dark" style={{ width: 11, height: 11 }} /> Adding…</> : "+ Add Lead"}
         </button>
       </form>
+      )}
 
       {WALK_IN_ENABLED && (
         <div className="form-card" style={{ marginBottom: 22, background: "var(--surface-soft)" }}>
@@ -1068,11 +1156,12 @@ export default function BruteForceJobsView() {
             🗺️ Walk-in Route planner
           </div>
           <div style={{ fontSize: 11, color: "var(--mute)", marginBottom: 12, lineHeight: 1.5 }}>
-            Date choose karo — neeche wali leads <b>usi din banayi gayi</b> cards dikhati hain. Jis din lead add/import karoge, woh usi din ke tab mein aayegi. Future date pe abhi 0 leads honge.
+            Date choose karo — neeche wali leads <b>usi din banayi gayi</b> cards dikhati hain. Left pe <b>previous dates</b> (Yesterday aur pehle), right pe future. Jis din lead add/import karoge, woh usi din ke tab mein aayegi.
           </div>
           <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 4 }}>
-            {nextRouteDates(10).map(dk => {
+            {nextRouteDates(14, 9).map(dk => {
               const isActiveChip = dk === selectedRouteDate;
+              const isToday = dk === dateKeyFromDate(new Date());
               // Us din create hue active (pending) leads.
               const dayActive = leads.filter(lead =>
                 lead.decision === "pending" &&
@@ -1090,6 +1179,7 @@ export default function BruteForceJobsView() {
                 <button
                   key={dk}
                   type="button"
+                  ref={isToday ? todayChipRef : undefined}
                   onClick={() => setSelectedRouteDate(dk)}
                   title={total === 0 ? "Koi active lead nahi" : allDone ? "Is din sab active leads ka status change hua ✓" : `${changed}/${total} active leads ka status change hua`}
                   style={{
@@ -1120,7 +1210,7 @@ export default function BruteForceJobsView() {
             })}
           </div>
           <div style={{ fontSize: 10, color: "var(--mute)", marginTop: 8 }}>
-            Circle = us din sab active leads ka status change hua ya nahi (green ✓ = sab pe call karke status liya).
+            Circle = us din sab active leads ka status change hua ya nahi (green ✓ = sab pe call karke status liya). Left scroll = pehle wali leads.
           </div>
         </div>
       )}

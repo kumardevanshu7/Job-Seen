@@ -114,6 +114,7 @@ export type BruteForceCallOutcome =
   | "incoming_not_allowed"
   | "no_vacancies"
   | "not_connected"
+  | "switched_off"
   | "resume_sent"
   | "success";
 
@@ -507,6 +508,45 @@ export async function updateJobStatus(
   if (extra?.reminderDismissedAt !== undefined) updates.reminderDismissedAt = extra.reminderDismissedAt;
   if (extra?.cancelReason !== undefined) updates.cancelReason = extra.cancelReason;
   await updateDoc(doc(db, "jobs", jobId), updates);
+}
+
+export type JobEditableFields = {
+  company: string;
+  role: string;
+  location: string;
+  ctc: string;
+  applyLink: string;
+  appliedVia: string;
+  appliedViaOther: string;
+  batch: string[];
+  bond: string;
+  lastDate: Date | null;
+  mapLink: string;
+  nearestMetro: string;
+  employmentType: EmploymentType;
+  internshipMonths: string;
+  ppo: string;
+};
+
+export async function updateJobFields(jobId: string, fields: JobEditableFields): Promise<void> {
+  const isIntern = fields.employmentType === "internship";
+  await updateDoc(doc(db, "jobs", jobId), {
+    company: fields.company.trim(),
+    role: fields.role.trim(),
+    location: fields.location.trim(),
+    ctc: fields.ctc.trim(),
+    applyLink: fields.applyLink.trim(),
+    appliedVia: fields.appliedVia,
+    appliedViaOther: fields.appliedVia === "Others" ? fields.appliedViaOther.trim() : "",
+    batch: fields.batch,
+    bond: fields.bond.trim(),
+    lastDate: fields.lastDate,
+    mapLink: fields.mapLink.trim(),
+    nearestMetro: fields.nearestMetro.trim(),
+    employmentType: fields.employmentType,
+    internshipMonths: isIntern ? fields.internshipMonths.trim() : "",
+    ppo: isIntern ? fields.ppo : "",
+  });
 }
 
 export async function updateJobRouteOrder(

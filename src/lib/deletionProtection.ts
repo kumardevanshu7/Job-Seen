@@ -157,6 +157,33 @@ export function deleteBruteForceJobWithAnswer(uid: string, leadId: string, answe
   return deleteWithAnswer(uid, "bruteForceJobs", leadId, answer);
 }
 
+/**
+ * Verifies the deletion-protection answer by writing a non-destructive proof.
+ * Uses kind "jobs" with a synthetic targetId so it never unlocks a real job delete.
+ */
+export async function verifyDeletionAnswer(
+  uid: string,
+  answer: string,
+  purpose = "unlock"
+): Promise<void> {
+  const question = await getDeletionQuestion(uid);
+  if (!question) throw new Error("NO_DELETION_QUESTION");
+  const answerDigest = await digestDeletionAnswer(answer);
+  const kind: DeletionTargetKind = "jobs";
+  const targetId = `verify_${purpose}`.slice(0, 1500);
+  const proofId = `${kind}__${targetId}`;
+  const batch = writeBatch(db);
+  batch.set(doc(db, "deletionProofs", uid, "targets", proofId), {
+    uid,
+    kind,
+    targetId,
+    answerDigest,
+    secretVersion: question.version,
+    createdAt: serverTimestamp(),
+  });
+  await batch.commit();
+}
+
 export async function deleteBruteForceJobsWithAnswer(
   uid: string,
   leadIds: string[],
@@ -199,5 +226,5 @@ export function deletionProtectionError(error: unknown): string {
   if (value?.code === "permission-denied" || value?.code === "firestore/permission-denied") {
     return "Answer galat hai, ya updated Firestore rules publish nahi hui hain.";
   }
-  return value?.message || "Deletion verify nahi ho payi. Dobara try karo.";
+  return value?.message || "Verification fail ho gayi. Dobara try karo.";
 }

@@ -7,9 +7,10 @@ import {
   type JobCard as JobCardType,
   type JobStatus,
 } from "../../lib/firestore";
-import { deleteJobWithAnswer, deletionProtectionError } from "../../lib/deletionProtection";
+import { deleteJobWithAnswer, deletionProtectionError, verifyDeletionAnswer } from "../../lib/deletionProtection";
 import { ToastProvider, showToast } from "../ui/Toast";
 import DeletionChallengeModal from "../ui/DeletionChallengeModal";
+import JobEditModal from "./JobEditModal";
 import ShimmerSkeleton from "../ui/ShimmerSkeleton";
 import { safeExternalUrl } from "../../lib/security";
 
@@ -102,7 +103,9 @@ function buildShareHtml(job: JobCardType): string {
 
   let extra = "";
   if (job.employmentType === "internship") {
-    extra += rowHtml("Internship duration", job.internshipMonths ? `${job.internshipMonths} months` : "—");
+    extra += rowHtml("Internship duration", job.internshipMonths
+      ? (/^\d+(\.\d+)?$/.test(job.internshipMonths.trim()) ? `${job.internshipMonths} months` : job.internshipMonths)
+      : "—");
     extra += rowHtml("PPO", ppoLabel(job.ppo));
   }
   if (job.jobType === "walkin" || job.nearestMetro || job.mapLink) {
@@ -261,6 +264,10 @@ export default function JobDetailsView() {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleteBusy, setDeleteBusy] = useState(false);
   const [deleteError, setDeleteError] = useState("");
+  const [editChallengeOpen, setEditChallengeOpen] = useState(false);
+  const [editUnlocked, setEditUnlocked] = useState(false);
+  const [editBusy, setEditBusy] = useState(false);
+  const [editError, setEditError] = useState("");
 
   const [jobId, setJobId] = useState(() => jobIdFromUrl());
 
@@ -349,6 +356,27 @@ export default function JobDetailsView() {
     }
   }
 
+  async function confirmEditUnlock(answer: string) {
+    if (!job || !auth.user) return;
+    setEditBusy(true);
+    setEditError("");
+    try {
+      await verifyDeletionAnswer(auth.user.uid, answer, `edit_${job.id}`);
+      setEditChallengeOpen(false);
+      setEditUnlocked(true);
+    } catch (error) {
+      setEditError(deletionProtectionError(error));
+    } finally {
+      setEditBusy(false);
+    }
+  }
+
+  async function refreshJob() {
+    if (!jobId) return;
+    const data = await getJobById(jobId);
+    if (data) setJob(data);
+  }
+
   if (loading) return <><ToastProvider /><ShimmerSkeleton variant="jobs" count={2} /></>;
 
   if (notFound || !job) {
@@ -380,6 +408,26 @@ export default function JobDetailsView() {
           error={deleteError}
           onCancel={() => { if (!deleteBusy) { setDeleteOpen(false); setDeleteError(""); } }}
           onConfirm={confirmDelete}
+        />
+      )}
+      {editChallengeOpen && auth.user && (
+        <DeletionChallengeModal
+          uid={auth.user.uid}
+          title="Edit this job?"
+          description="Job edit karne se pehle Settings wala deletion-protection answer verify karo."
+          confirmLabel="Verify & edit"
+          confirmTone="primary"
+          busy={editBusy}
+          error={editError}
+          onCancel={() => { if (!editBusy) { setEditChallengeOpen(false); setEditError(""); } }}
+          onConfirm={confirmEditUnlock}
+        />
+      )}
+      {editUnlocked && job && (
+        <JobEditModal
+          job={job}
+          onClose={() => setEditUnlocked(false)}
+          onSaved={() => { void refreshJob(); }}
         />
       )}
 
@@ -422,6 +470,11 @@ export default function JobDetailsView() {
               </a>
             )}
             {isOwner && (
+              <button type="button" className="btn btn-secondary" onClick={() => { setEditError(""); setEditChallengeOpen(true); }}>
+                Edit
+              </button>
+            )}
+            {isOwner && (
               <button type="button" className="btn btn-secondary" onClick={() => { setDeleteError(""); setDeleteOpen(true); }} style={{ color: "#c0392b", borderColor: "#e0a8a8" }}>
                 Delete
               </button>
@@ -449,7 +502,9 @@ export default function JobDetailsView() {
         <DetailRow label="Added by" value={`@${job.ownerUsername}`} />
         {job.employmentType === "internship" && (
           <>
-            <DetailRow label="Internship duration" value={job.internshipMonths ? `${job.internshipMonths} months` : "—"} />
+            <DetailRow label="Internship duration" value={job.internshipMonths
+              ? (/^\d+(\.\d+)?$/.test(job.internshipMonths.trim()) ? `${job.internshipMonths} months` : job.internshipMonths)
+              : "—"} />
             <DetailRow label="PPO" value={ppoLabel(job.ppo)} />
           </>
         )}

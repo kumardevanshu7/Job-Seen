@@ -332,9 +332,12 @@ body {
 }
 
 /* ─── Job Row (Todoist task style) ────────────────────────────────────────── */
-.job-list { 
-  border-top: 1px solid var(--hairline); 
+.job-list {
+  border-top: 1px solid var(--hairline);
   padding-top: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
 }
 
 .job-row {

@@ -24,9 +24,9 @@ function stringField(
 }
 
 function validDate(value: string, rowNumber: number): Date | null {
-  if (!value) return null;
+  if (!value || /^n\/?a$/i.test(value)) return null;
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
-    throw new Error(`Row ${rowNumber}: lastDate YYYY-MM-DD format mein honi chahiye.`);
+    throw new Error(`Row ${rowNumber}: lastDate YYYY-MM-DD format mein honi chahiye (ya N/A).`);
   }
   const date = new Date(`${value}T00:00:00`);
   if (Number.isNaN(date.getTime()) || date.toISOString().slice(0, 10) !== value) {

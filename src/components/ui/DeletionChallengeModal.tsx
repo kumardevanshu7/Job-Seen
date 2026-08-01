@@ -5,6 +5,9 @@ interface Props {
   uid: string;
   title?: string;
   targetLabel?: string;
+  description?: string;
+  confirmLabel?: string;
+  confirmTone?: "danger" | "primary";
   busy?: boolean;
   error?: string;
   onConfirm: (answer: string) => void | Promise<void>;
@@ -15,6 +18,9 @@ export default function DeletionChallengeModal({
   uid,
   title = "Confirm protected deletion",
   targetLabel = "This item",
+  description,
+  confirmLabel = "Verify & delete",
+  confirmTone = "danger",
   busy = false,
   error,
   onConfirm,
@@ -67,10 +73,10 @@ export default function DeletionChallengeModal({
           borderRadius: 10, boxShadow: "0 20px 60px rgba(0,0,0,0.18)", fontFamily: "inherit",
         }}
       >
-        <div style={{ width: 42, height: 42, borderRadius: "50%", background: "#fee2e2", color: "#dc2626", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, marginBottom: 14 }}>?</div>
+        <div style={{ width: 42, height: 42, borderRadius: "50%", background: confirmTone === "danger" ? "#fee2e2" : "#eff6ff", color: confirmTone === "danger" ? "#dc2626" : "#1d4ed8", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, marginBottom: 14 }}>?</div>
         <h2 id="deletion-challenge-title" style={{ margin: "0 0 7px", fontSize: 17, color: "var(--ink)" }}>{title}</h2>
         <p style={{ margin: "0 0 16px", fontSize: 13, lineHeight: 1.55, color: "var(--mute)" }}>
-          {targetLabel} permanently delete hoga. Apna configured answer enter karo.
+          {description || `${targetLabel} permanently delete hoga. Apna configured answer enter karo.`}
         </p>
 
         {loading ? (
@@ -105,8 +111,8 @@ export default function DeletionChallengeModal({
             {inlineError && <div role="alert" style={{ color: "#b91c1c", fontSize: 12, lineHeight: 1.45, marginTop: 9 }}>{inlineError}</div>}
             <div style={{ display: "flex", justifyContent: "flex-end", gap: 9, marginTop: 20 }}>
               <button type="button" className="btn btn-secondary" disabled={busy} onClick={onCancel}>Cancel</button>
-              <button type="submit" className="btn btn-danger" disabled={busy || !answer.trim()}>
-                {busy ? <><div className="spinner" style={{ width: 11, height: 11 }} /> Verifying…</> : "Verify & delete"}
+              <button type="submit" className={confirmTone === "danger" ? "btn btn-danger" : "btn btn-primary"} disabled={busy || !answer.trim()}>
+                {busy ? <><div className="spinner" style={{ width: 11, height: 11 }} /> Verifying…</> : confirmLabel}
               </button>
             </div>
           </form>
