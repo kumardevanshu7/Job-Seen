@@ -53,6 +53,8 @@ const STATUS_STYLES: Record<DisplayStatus, StatusMeta> = {
     dot: "linear-gradient(90deg, #16a34a 0%, #dc2626 100%)",
   },
   not_connected: { label: "Not Connected - Try Again", color: "#ea580c", bg: "#fff7ed", border: "#fed7aa" },
+  call_busy: { label: "Call Busy - Try Again", color: "#d97706", bg: "#fffbeb", border: "#fcd34d" },
+  call_later: { label: "Wait - Call me later", color: "#0891b2", bg: "#ecfeff", border: "#a5f3fc" },
   switched_off: {
     label: "Switched off",
     color: "#475569",
@@ -76,6 +78,8 @@ const STATUS_REASON: Record<DisplayStatus, string> = {
   incoming_not_allowed: "Dark crimson — incoming band",
   no_vacancies: "Green + red — call laga (green) par vacancy nahi (red)",
   not_connected: "Orange — call connect nahi hua, dobara try karo",
+  call_busy: "Amber — line busy, dobara try karo",
+  call_later: "Cyan — bola baad mein call karo",
   switched_off: "Grey + white mix — phone switched off",
   resume_sent: "Yellow — resume bheja, hold pe",
   success: "Green — interview scheduled",
@@ -84,11 +88,11 @@ const STATUS_REASON: Record<DisplayStatus, string> = {
 };
 
 const OUTCOME_VALUES: BruteForceCallOutcome[] = [
-  "not_called", "no_response", "wrong_number", "incoming_not_allowed", "no_vacancies", "not_connected", "switched_off", "resume_sent", "success",
+  "not_called", "no_response", "wrong_number", "incoming_not_allowed", "no_vacancies", "not_connected", "call_busy", "call_later", "switched_off", "resume_sent", "success",
 ];
 const OUTCOMES = OUTCOME_VALUES.map(value => ({ value, ...STATUS_STYLES[value] }));
 const STATUS_LEGEND: DisplayStatus[] = [
-  "not_called", "no_response", "wrong_number", "incoming_not_allowed", "no_vacancies", "not_connected", "switched_off", "resume_sent", "success", "selected", "rejected",
+  "not_called", "no_response", "wrong_number", "incoming_not_allowed", "no_vacancies", "not_connected", "call_busy", "call_later", "switched_off", "resume_sent", "success", "selected", "rejected",
 ];
 
 function displayStatusOf(lead: BruteForceJob): DisplayStatus {

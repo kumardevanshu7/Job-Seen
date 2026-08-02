@@ -114,6 +114,8 @@ export type BruteForceCallOutcome =
   | "incoming_not_allowed"
   | "no_vacancies"
   | "not_connected"
+  | "call_busy"
+  | "call_later"
   | "switched_off"
   | "resume_sent"
   | "success";

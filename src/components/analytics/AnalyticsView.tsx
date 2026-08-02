@@ -24,7 +24,8 @@ type Row = {
 const RANK: Record<string, number> = {
   "Selected": 0, "Resume sent (hold)": 1, "Interview scheduled": 2,
   "Applied": 3, "Selected!": 3, "Call picked but no vacancies there": 4,
-  "Incoming not allowed": 5, "Wrong number": 6, "Not Connected - Try Again": 6.5, "Ringing but no response": 7,
+  "Incoming not allowed": 5, "Wrong number": 6, "Not Connected - Try Again": 6.5,
+  "Call Busy - Try Again": 6.6, "Wait - Call me later": 6.7, "Ringing but no response": 7,
   "Pending": 8, "Not Applied": 9, "Not called": 10, "Rejected": 99,
 };
 
@@ -46,6 +47,8 @@ const BRUTE_META: Record<string, { label: string; color: string; bg: string; bor
   incoming_not_allowed: { label: "Incoming not allowed", color: "#9f1239", bg: "#fff1f2", border: "#fda4af" },
   no_vacancies:         { label: "Call picked but no vacancies there", color: "#7c2d12", bg: "linear-gradient(90deg,#dcfce7,#fee2e2)", border: "#fbcfe8" },
   not_connected:        { label: "Not Connected - Try Again", color: "#ea580c", bg: "#fff7ed", border: "#fed7aa" },
+  call_busy:            { label: "Call Busy - Try Again", color: "#d97706", bg: "#fffbeb", border: "#fcd34d" },
+  call_later:           { label: "Wait - Call me later",  color: "#0891b2", bg: "#ecfeff", border: "#a5f3fc" },
   switched_off:         { label: "Switched off",         color: "#475569", bg: "linear-gradient(90deg,#e5e7eb,#ffffff,#f3f4f6)", border: "#d1d5db" },
   resume_sent:          { label: "Resume sent (hold)",   color: "#ca8a04", bg: "#fefce8", border: "#fde68a" },
   success:              { label: "Interview scheduled",  color: "#16a34a", bg: "#f0fdf4", border: "#bbf7d0" },
