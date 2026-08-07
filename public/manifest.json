@@ -1,44 +1,70 @@
 {
-  "name": "JobSeen – Job Listing Tracker",
+  "id": "/",
+  "name": "JobSeen",
   "short_name": "JobSeen",
   "description": "Track, organize, and share job listings with your connections.",
-  "start_url": "/",
-  "display": "standalone",
-  "background_color": "#0A0A0F",
-  "theme_color": "#6C63FF",
-  "orientation": "portrait-primary",
+  "start_url": "/?source=pwa",
   "scope": "/",
+  "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
+  "background_color": "#fdfcfc",
+  "theme_color": "#fdfcfc",
+  "orientation": "portrait-primary",
+  "lang": "en",
+  "dir": "ltr",
   "icons": [
     {
       "src": "/logo/android-chrome-192x192.png",
       "sizes": "192x192",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "any"
     },
     {
       "src": "/logo/android-chrome-512x512.png",
       "sizes": "512x512",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "any"
+    },
+    {
+      "src": "/logo/android-chrome-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/logo/android-chrome-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
     }
   ],
-  "screenshots": [],
   "categories": ["productivity", "business"],
   "shortcuts": [
     {
       "name": "Add Job",
       "short_name": "Add Job",
       "description": "Add a new job listing",
-      "url": "/add-job",
-      "icons": [{ "src": "/logo/android-chrome-192x192.png", "sizes": "192x192" }]
+      "url": "/add-job?source=pwa",
+      "icons": [
+        {
+          "src": "/logo/android-chrome-192x192.png",
+          "sizes": "192x192",
+          "type": "image/png"
+        }
+      ]
     },
     {
-      "name": "My Jobs",
-      "short_name": "My Jobs",
+      "name": "Inbox",
+      "short_name": "Inbox",
       "description": "View your saved jobs",
-      "url": "/",
-      "icons": [{ "src": "/logo/android-chrome-192x192.png", "sizes": "192x192" }]
+      "url": "/?source=pwa",
+      "icons": [
+        {
+          "src": "/logo/android-chrome-192x192.png",
+          "sizes": "192x192",
+          "type": "image/png"
+        }
+      ]
     }
   ]
 }
-
