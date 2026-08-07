@@ -663,11 +663,17 @@ export default function BruteForceJobsView() {
       .filter(lead => leadCreatedDateKey(lead) === todayDateKey && lead.retryFromLeadId)
       .map(lead => lead.retryFromLeadId as string)
   ), [leads, todayDateKey]);
-  const canOfferRetry = !!statusFilter && selectedRouteDate !== todayDateKey && shownItems.length > 0;
+  const isPastRouteDate = selectedRouteDate !== todayDateKey;
+  /** Banner + per-card when a status filter is open on a past date. */
+  const canOfferRetryFilter = !!statusFilter && isPastRouteDate && shownItems.length > 0;
+  /** Select a bunch on any past date → Add selected to today. */
+  const canOfferRetrySelected = isPastRouteDate;
   const retryableVisibleCount = shownItems.filter(lead => !retriedTodaySourceIds.has(lead.id)).length;
   const retryableSelectedCount = [...selectedLeadIds].filter(id => {
     const lead = leads.find(item => item.id === id);
-    return lead && !retriedTodaySourceIds.has(lead.id) && shownItems.some(item => item.id === id);
+    return lead
+      && leadCreatedDateKey(lead) === selectedRouteDate
+      && !retriedTodaySourceIds.has(lead.id);
   }).length;
 
   async function addLeadsToToday(sourceLeads: BruteForceJob[]) {
@@ -677,7 +683,7 @@ export default function BruteForceJobsView() {
     }
     const unique = sourceLeads.filter(lead => !retriedTodaySourceIds.has(lead.id));
     if (unique.length === 0) {
-      showToast("Ye leads aaj ke liye pehle se add ho chuki hain.", "error");
+      showToast("These leads are already on today.", "error");
       return;
     }
     setRetryBusy(true);
@@ -691,9 +697,14 @@ export default function BruteForceJobsView() {
       setSelectedRouteDate(todayDateKey);
       setStatusFilter(null);
       setSelectedLeadIds(new Set());
-      showToast(`${count} lead${count === 1 ? "" : "s"} aaj ki date pe add — dubara try karo.`, "info");
+      showToast(
+        count === 1
+          ? "Added 1 lead to today. You can try it again."
+          : `Added ${count} leads to today. You can try them again.`,
+        "success"
+      );
     } catch (error) {
-      showToast(error instanceof Error ? error.message : "Retry add fail ho gaya.", "error");
+      showToast(error instanceof Error ? error.message : "Failed to add leads to today.", "error");
     } finally {
       setRetryBusy(false);
     }
@@ -704,7 +715,13 @@ export default function BruteForceJobsView() {
   }
 
   function handleAddSelectedToToday() {
-    const selected = shownItems.filter(lead => selectedLeadIds.has(lead.id));
+    if (selectedLeadIds.size === 0) {
+      showToast("Select cards first.", "error");
+      return;
+    }
+    const selected = leads.filter(
+      lead => selectedLeadIds.has(lead.id) && leadCreatedDateKey(lead) === selectedRouteDate
+    );
     void addLeadsToToday(selected);
   }
 
@@ -1221,7 +1238,7 @@ export default function BruteForceJobsView() {
             );
           })}
         </div>
-        {canOfferRetry && (
+        {canOfferRetryFilter && (
           <div style={{
             marginTop: 14,
             padding: "12px 14px",
@@ -1237,7 +1254,7 @@ export default function BruteForceJobsView() {
             <div style={{ fontSize: 12, color: "var(--body)", lineHeight: 1.55, maxWidth: 520 }}>
               <strong style={{ color: "var(--ink)" }}>{STATUS_STYLES[statusFilter!].label}</strong>
               {" "}— {shownItems.length} lead{shownItems.length === 1 ? "" : "s"} ({routeDateLabel(selectedRouteDate)}).
-              Inhe aaj ki date pe add karo taaki dubara try kar sako.
+              Add them to today to try again, or select a few and use Add selected to today.
             </div>
             <button
               type="button"
@@ -1507,14 +1524,14 @@ export default function BruteForceJobsView() {
                   <button type="button" className="btn btn-ghost btn-sm" disabled={bulkDeleting} onClick={() => setSelectedLeadIds(new Set())}>
                     Clear
                   </button>
-                  {canOfferRetry && (
+                  {canOfferRetrySelected && (
                     <button
                       type="button"
                       className="btn btn-primary btn-sm"
                       disabled={retryBusy || retryableSelectedCount === 0}
                       onClick={handleAddSelectedToToday}
                     >
-                      Add selected to today ({retryableSelectedCount})
+                      {retryBusy ? "Adding…" : `Add selected to today (${retryableSelectedCount})`}
                     </button>
                   )}
                   <button type="button" className="btn btn-danger btn-sm" disabled={bulkDeleting} onClick={openBulkDelete}>
@@ -1557,7 +1574,7 @@ export default function BruteForceJobsView() {
                   onToggleSelected={toggleLeadSelection}
                   onDelete={leadToDelete => { setDeleteError(""); setDeleteTarget(leadToDelete); }}
                   onEdit={leadToEdit => { setEditError(""); setEditUnlocked(false); setEditAnswer(""); setEditTarget(leadToEdit); }}
-                  onAddToToday={canOfferRetry ? handleAddSingleToToday : undefined}
+                  onAddToToday={canOfferRetrySelected ? handleAddSingleToToday : undefined}
                   alreadyRetriedToday={retriedTodaySourceIds.has(lead.id)}
                 />
               );
