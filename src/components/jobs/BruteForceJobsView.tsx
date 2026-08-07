@@ -102,6 +102,45 @@ function displayStatusOf(lead: BruteForceJob): DisplayStatus {
   if (lead.decision === "selected" || lead.decision === "rejected") return lead.decision;
   return lead.callOutcome;
 }
+
+/** Light gradient palette — fresh / not_called cards look distinct but stay soft. */
+type CardSurface = { bg: string; border: string; color: string; dot?: string };
+
+const FRESH_CARD_PALETTE: CardSurface[] = [
+  { bg: "linear-gradient(135deg, #f8fafc 0%, #eef2ff 55%, #f5f3ff 100%)", border: "#c7d2fe", color: "#4338ca" },
+  { bg: "linear-gradient(135deg, #fff7ed 0%, #ffedd5 55%, #fef3c7 100%)", border: "#fed7aa", color: "#c2410c" },
+  { bg: "linear-gradient(135deg, #ecfdf5 0%, #d1fae5 55%, #f0fdf4 100%)", border: "#a7f3d0", color: "#047857" },
+  { bg: "linear-gradient(135deg, #fdf2f8 0%, #fce7f3 55%, #fff1f2 100%)", border: "#fbcfe8", color: "#be185d" },
+  { bg: "linear-gradient(135deg, #ecfeff 0%, #cffafe 55%, #f0fdfa 100%)", border: "#a5f3fc", color: "#0e7490" },
+  { bg: "linear-gradient(135deg, #faf5ff 0%, #ede9fe 55%, #f5f3ff 100%)", border: "#ddd6fe", color: "#6d28d9" },
+  { bg: "linear-gradient(135deg, #fefce8 0%, #fef9c3 55%, #fffbeb 100%)", border: "#fde68a", color: "#a16207" },
+  { bg: "linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 55%, #eff6ff 100%)", border: "#bae6fd", color: "#0369a1" },
+  { bg: "linear-gradient(135deg, #fff1f2 0%, #ffe4e6 55%, #fdf2f8 100%)", border: "#fecdd3", color: "#be123c" },
+  { bg: "linear-gradient(135deg, #f7fee7 0%, #ecfccb 55%, #f0fdf4 100%)", border: "#d9f99d", color: "#4d7c0f" },
+  { bg: "linear-gradient(135deg, #f5f5f4 0%, #e7e5e4 55%, #fafaf9 100%)", border: "#d6d3d1", color: "#57534e" },
+  { bg: "linear-gradient(135deg, #fdf4ff 0%, #fae8ff 55%, #faf5ff 100%)", border: "#e9d5ff", color: "#7e22ce" },
+  { bg: "linear-gradient(135deg, #fffbeb 0%, #fef3c7 40%, #ecfdf5 100%)", border: "#fcd34d", color: "#b45309" },
+  { bg: "linear-gradient(135deg, #f0fdfa 0%, #ccfbf1 55%, #ecfeff 100%)", border: "#99f6e4", color: "#0f766e" },
+];
+
+function hashPaletteIndex(seed: string, size: number): number {
+  let h = 2166136261;
+  for (let i = 0; i < seed.length; i++) {
+    h ^= seed.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return (h >>> 0) % size;
+}
+
+function leadCardSurface(lead: BruteForceJob, statusKey: DisplayStatus): CardSurface {
+  const base = STATUS_STYLES[statusKey];
+  const isFresh = statusKey === "not_called" && lead.decision === "pending";
+  if (!isFresh) {
+    return { bg: base.bg, border: base.border, color: base.color, dot: base.dot };
+  }
+  return FRESH_CARD_PALETTE[hashPaletteIndex(lead.id || lead.company, FRESH_CARD_PALETTE.length)];
+}
+
 const INITIAL_FORM = { company: "", phone: "", location: "", mapLink: "", role: "" };
 const MAX_IMPORT_FILE_BYTES = 1024 * 1024;
 const MAX_IMPORT_ROWS = 100;
@@ -234,6 +273,7 @@ function LeadCard(props: LeadCardProps) {
   const isFinal = lead.decision !== "pending";
   const statusKey: DisplayStatus = isFinal ? lead.decision as Exclude<BruteForceDecision, "pending"> : lead.callOutcome;
   const status = STATUS_STYLES[statusKey];
+  const surface = leadCardSurface(lead, statusKey);
   const safeMapLink = safeExternalUrl(lead.mapLink);
   const successAt = toMillis(lead.successAt);
   const interviewAt = toMillis(lead.interviewAt);
@@ -243,11 +283,11 @@ function LeadCard(props: LeadCardProps) {
 
   return (
     <article style={{
-      border: `${props.selected ? 2 : 1}px solid ${props.selected ? status.color : status.border}`,
+      border: `${props.selected ? 2 : 1}px solid ${props.selected ? surface.color : surface.border}`,
       borderRadius: 10,
       padding: props.selected ? 17 : 18,
-      background: status.bg,
-      boxShadow: props.selected ? `0 0 0 3px ${status.border}` : "none",
+      background: surface.bg,
+      boxShadow: props.selected ? `0 0 0 3px ${surface.border}` : "none",
       transition: "border-color 140ms ease, box-shadow 140ms ease",
     }}>
       <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "flex-start", flexWrap: "wrap" }}>
@@ -258,7 +298,7 @@ function LeadCard(props: LeadCardProps) {
             disabled={busy || !props.canDelete}
             onChange={() => props.onToggleSelected(lead.id)}
             aria-label={`Select ${lead.company}`}
-            style={{ width: 18, height: 18, margin: "2px 0 0", accentColor: status.color, flexShrink: 0, cursor: "pointer" }}
+            style={{ width: 18, height: 18, margin: "2px 0 0", accentColor: surface.color, flexShrink: 0, cursor: "pointer" }}
           />
           <span>
             <span style={{ display: "block", fontSize: 16, fontWeight: 750, color: "var(--ink)" }}>{lead.company}</span>
@@ -266,7 +306,7 @@ function LeadCard(props: LeadCardProps) {
             <span style={{ display: "block", fontSize: 12, color: "var(--mute)", marginTop: 5 }}>{lead.location}</span>
           </span>
         </label>
-        <span style={{ color: status.color, background: "var(--canvas)", border: `1px solid ${status.border}`, borderRadius: 999, padding: "5px 9px", fontSize: 11, fontWeight: 700 }}>
+        <span style={{ color: status.color, background: "var(--canvas)", border: `1px solid ${surface.border}`, borderRadius: 999, padding: "5px 9px", fontSize: 11, fontWeight: 700 }}>
           {status.label}
         </span>
       </div>
@@ -448,11 +488,11 @@ function LeadCard(props: LeadCardProps) {
         <div style={{
           marginTop: 16,
           paddingTop: 12,
-          borderTop: `1px solid ${status.border}`,
+          borderTop: `1px solid ${surface.border}`,
           fontSize: 11,
           lineHeight: 1.5,
         }}>
-          <div style={{ fontWeight: 800, color: status.color, letterSpacing: "0.02em" }}>
+          <div style={{ fontWeight: 800, color: surface.color, letterSpacing: "0.02em" }}>
             {ordinalTryLabel(lead.tryNumber)} — {routeDateLabel(leadCreatedDateKey(lead))}
           </div>
           <div style={{ color: "var(--mute)", marginTop: 4, fontWeight: 600 }}>
