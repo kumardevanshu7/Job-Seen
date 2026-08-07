@@ -36,6 +36,14 @@ const secondaryNav = [
   { href: "/explore",              label: "Explore Arigato Labs", icon: "image" },
 ];
 
+const legalNav = [
+  { href: "/about",       label: "About",               icon: "※" },
+  { href: "/privacy",     label: "Privacy Policy",      icon: "☰" },
+  { href: "/terms",       label: "Terms & Conditions",  icon: "¶" },
+  { href: "/disclaimer",  label: "Disclaimer",          icon: "!" },
+  { href: "/contact",     label: "Contact",             icon: "@" },
+];
+
 export default function Sidebar() {
   const auth = useStore($auth);
   const notifications = useStore($notifications);
@@ -139,6 +147,14 @@ export default function Sidebar() {
           ))}
         </div>
 
+        <div className="nav-divider" />
+        <div className="sidebar-section">Arigato Labs</div>
+        <div style={{ padding: "0 8px" }}>
+          {legalNav.map(item => (
+            <NavItem key={item.href} href={item.href} label={item.label} icon={item.icon} />
+          ))}
+        </div>
+
         {admin && (
           <>
             <div className="nav-divider" />
@@ -211,6 +227,11 @@ export default function Sidebar() {
             {...item}
             count={item.hasChatCount ? unreadChat : (item.hasCount ? unread : undefined)}
           />
+        ))}
+
+        <div className="mobile-drawer-section">Arigato Labs</div>
+        {legalNav.map(item => (
+          <DrawerLink key={item.href} {...item} />
         ))}
 
         {admin && (
