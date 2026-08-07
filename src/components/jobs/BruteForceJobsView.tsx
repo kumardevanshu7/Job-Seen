@@ -266,10 +266,91 @@ interface LeadCardProps {
   onEdit: (lead: BruteForceJob) => void;
   onAddToToday?: (lead: BruteForceJob) => void;
   alreadyRetriedToday?: boolean;
+  /** Latest retry that was created from this lead (if any). */
+  continuedOn?: BruteForceJob | null;
+}
+
+function ContinuedElsewhereCard(props: {
+  lead: BruteForceJob;
+  continuedOn: BruteForceJob;
+  selected: boolean;
+  canDelete: boolean;
+  busy: boolean;
+  onToggleSelected: (leadId: string) => void;
+  onDelete: (lead: BruteForceJob) => void;
+}) {
+  const { lead, continuedOn } = props;
+  const laterKey = leadCreatedDateKey(continuedOn);
+  const tryLabel = continuedOn.tryNumber && continuedOn.tryNumber >= 2
+    ? ordinalTryLabel(continuedOn.tryNumber)
+    : "a later try";
+
+  return (
+    <article style={{
+      border: `${props.selected ? 2 : 1}px solid ${props.selected ? "#ca8a04" : "#fde68a"}`,
+      borderRadius: 10,
+      padding: props.selected ? 15 : 16,
+      background: "linear-gradient(135deg, #fffbeb 0%, #fefce8 55%, #f8fafc 100%)",
+      boxShadow: props.selected ? "0 0 0 3px #fef3c7" : "none",
+    }}>
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "flex-start", flexWrap: "wrap" }}>
+        <label style={{ display: "flex", alignItems: "flex-start", gap: 11, cursor: props.canDelete ? "pointer" : "default", flex: 1, minWidth: 180 }}>
+          <input
+            type="checkbox"
+            checked={props.selected}
+            disabled={props.busy || !props.canDelete}
+            onChange={() => props.onToggleSelected(lead.id)}
+            aria-label={`Select ${lead.company}`}
+            style={{ width: 18, height: 18, margin: "2px 0 0", accentColor: "#ca8a04", flexShrink: 0, cursor: "pointer" }}
+          />
+          <span>
+            <span style={{ display: "block", fontSize: 15, fontWeight: 750, color: "var(--ink)" }}>{lead.company}</span>
+            <span style={{ display: "block", fontSize: 12, color: "var(--mute)", marginTop: 3 }}>{lead.role}</span>
+          </span>
+        </label>
+        {props.canDelete && (
+          <button
+            type="button"
+            className="btn btn-danger btn-sm"
+            disabled={props.busy}
+            onClick={() => props.onDelete(lead)}
+          >
+            Delete
+          </button>
+        )}
+      </div>
+      <div style={{
+        marginTop: 12,
+        padding: "10px 12px",
+        borderRadius: 8,
+        border: "1px dashed #fcd34d",
+        background: "rgba(255,255,255,0.7)",
+        fontSize: 12,
+        lineHeight: 1.55,
+        color: "#92400e",
+        fontWeight: 700,
+      }}>
+        This card was continued on a later date ({tryLabel} — {routeDateLabel(laterKey)}). No further action needed here.
+      </div>
+    </article>
+  );
 }
 
 function LeadCard(props: LeadCardProps) {
-  const { lead, now, busy } = props;
+  const { lead, now, busy, continuedOn } = props;
+  if (continuedOn) {
+    return (
+      <ContinuedElsewhereCard
+        lead={lead}
+        continuedOn={continuedOn}
+        selected={props.selected}
+        canDelete={props.canDelete}
+        busy={busy}
+        onToggleSelected={props.onToggleSelected}
+        onDelete={props.onDelete}
+      />
+    );
+  }
   const isFinal = lead.decision !== "pending";
   const statusKey: DisplayStatus = isFinal ? lead.decision as Exclude<BruteForceDecision, "pending"> : lead.callOutcome;
   const status = STATUS_STYLES[statusKey];
@@ -698,6 +779,18 @@ export default function BruteForceJobsView() {
   const visibleLeadIds = shownItems.map(lead => lead.id);
   const allVisibleSelected = visibleLeadIds.length > 0 && visibleLeadIds.every(id => selectedLeadIds.has(id));
   const todayDateKey = dateKeyFromDate(new Date());
+  /** sourceLeadId → latest retry lead created from it */
+  const continuedBySourceId = useMemo(() => {
+    const map = new Map<string, BruteForceJob>();
+    leads.forEach(lead => {
+      if (!lead.retryFromLeadId) return;
+      const prev = map.get(lead.retryFromLeadId);
+      if (!prev || toMillis(lead.createdAt) >= toMillis(prev.createdAt)) {
+        map.set(lead.retryFromLeadId, lead);
+      }
+    });
+    return map;
+  }, [leads]);
   const retriedTodaySourceIds = useMemo(() => new Set(
     leads
       .filter(lead => leadCreatedDateKey(lead) === todayDateKey && lead.retryFromLeadId)
@@ -708,12 +801,15 @@ export default function BruteForceJobsView() {
   const canOfferRetryFilter = !!statusFilter && isPastRouteDate && shownItems.length > 0;
   /** Select a bunch on any past date → Add selected to today. */
   const canOfferRetrySelected = isPastRouteDate;
-  const retryableVisibleCount = shownItems.filter(lead => !retriedTodaySourceIds.has(lead.id)).length;
+  const retryableVisibleCount = shownItems.filter(
+    lead => !retriedTodaySourceIds.has(lead.id) && !continuedBySourceId.has(lead.id)
+  ).length;
   const retryableSelectedCount = [...selectedLeadIds].filter(id => {
     const lead = leads.find(item => item.id === id);
     return lead
       && leadCreatedDateKey(lead) === selectedRouteDate
-      && !retriedTodaySourceIds.has(lead.id);
+      && !retriedTodaySourceIds.has(lead.id)
+      && !continuedBySourceId.has(lead.id);
   }).length;
 
   async function addLeadsToToday(sourceLeads: BruteForceJob[]) {
@@ -721,7 +817,9 @@ export default function BruteForceJobsView() {
       showToast("Not logged in.", "error");
       return;
     }
-    const unique = sourceLeads.filter(lead => !retriedTodaySourceIds.has(lead.id));
+    const unique = sourceLeads.filter(
+      lead => !retriedTodaySourceIds.has(lead.id) && !continuedBySourceId.has(lead.id)
+    );
     if (unique.length === 0) {
       showToast("These leads are already on today.", "error");
       return;
@@ -1429,20 +1527,35 @@ export default function BruteForceJobsView() {
                 dateKeyFromDate(new Date(toMillis(lead.createdAt))) === dk
               );
               const total = dayActive.length;
-              // "Status change" = koi bhi outcome not_called ke alawa, us din record hua.
-              const changed = total === 0 ? 0 : dayActive.filter(lead =>
-                Array.isArray(lead.statusHistory) &&
-                lead.statusHistory.some(e => e.status !== "not_called" && dateKeyFromDate(new Date(e.at)) === dk)
-              ).length;
-              const allDone = total > 0 && changed === total;
-              const dotColor = total === 0 ? "#d1d5db" : allDone ? "#16a34a" : changed > 0 ? "#ca8a04" : "#d1d5db";
+              const changedOrContinued = total === 0 ? 0 : dayActive.filter(lead => {
+                if (continuedBySourceId.has(lead.id)) return true;
+                return Array.isArray(lead.statusHistory) &&
+                  lead.statusHistory.some(e => e.status !== "not_called" && dateKeyFromDate(new Date(e.at)) === dk);
+              }).length;
+              const continuedLaterCount = dayActive.filter(lead => {
+                const retry = continuedBySourceId.get(lead.id);
+                return retry && leadCreatedDateKey(retry) > dk;
+              }).length;
+              const allDone = total > 0 && changedOrContinued === total;
+              const hasContinuedLater = continuedLaterCount > 0;
+              const dotColor = total === 0 ? "#d1d5db" : allDone ? "#16a34a" : changedOrContinued > 0 ? "#ca8a04" : "#d1d5db";
+              const titleParts = [
+                total === 0
+                  ? "No active leads"
+                  : allDone
+                    ? "All leads for this day are done ✓"
+                    : `${changedOrContinued}/${total} leads handled`,
+              ];
+              if (hasContinuedLater) {
+                titleParts.push(`${continuedLaterCount} continued on a later date`);
+              }
               return (
                 <button
                   key={dk}
                   type="button"
                   ref={isToday ? todayChipRef : undefined}
                   onClick={() => setSelectedRouteDate(dk)}
-                  title={total === 0 ? "Koi active lead nahi" : allDone ? "Is din sab active leads ka status change hua ✓" : `${changed}/${total} active leads ka status change hua`}
+                  title={titleParts.join(" · ")}
                   style={{
                     flex: "0 0 auto", cursor: "pointer", fontFamily: "inherit",
                     display: "flex", flexDirection: "column", alignItems: "center", gap: 5,
@@ -1466,12 +1579,24 @@ export default function BruteForceJobsView() {
                   >
                     {allDone ? "✓" : ""}
                   </span>
+                  {hasContinuedLater && (
+                    <span
+                      aria-hidden="true"
+                      title="Some cards were continued on a later date"
+                      style={{
+                        width: 10, height: 10, borderRadius: "50%",
+                        background: "#eab308",
+                        border: "1.5px solid #ca8a04",
+                        boxShadow: isActiveChip ? "0 0 0 1px rgba(255,255,255,0.35)" : "none",
+                      }}
+                    />
+                  )}
                 </button>
               );
             })}
           </div>
           <div style={{ fontSize: 10, color: "var(--mute)", marginTop: 8 }}>
-            Circle = us din sab active leads ka status change hua ya nahi (green ✓ = sab pe call karke status liya). Left scroll = pehle wali leads.
+            Green ✓ = all leads that day are done. Yellow dot below = some cards were continued on a later date.
           </div>
         </div>
       )}
@@ -1614,8 +1739,9 @@ export default function BruteForceJobsView() {
                   onToggleSelected={toggleLeadSelection}
                   onDelete={leadToDelete => { setDeleteError(""); setDeleteTarget(leadToDelete); }}
                   onEdit={leadToEdit => { setEditError(""); setEditUnlocked(false); setEditAnswer(""); setEditTarget(leadToEdit); }}
-                  onAddToToday={canOfferRetrySelected ? handleAddSingleToToday : undefined}
+                  onAddToToday={canOfferRetrySelected && !continuedBySourceId.has(lead.id) ? handleAddSingleToToday : undefined}
                   alreadyRetriedToday={retriedTodaySourceIds.has(lead.id)}
+                  continuedOn={continuedBySourceId.get(lead.id) ?? null}
                 />
               );
             })}
