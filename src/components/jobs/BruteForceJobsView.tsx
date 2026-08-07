@@ -6,6 +6,7 @@ import {
   bruteForceRouteJobId,
   createBruteForceJob,
   createBruteForceJobs,
+  createBruteForceRetryLeads,
   recordBruteForceCallOutcome,
   rescheduleBruteForceInterview,
   setBruteForceDecision,
@@ -62,6 +63,7 @@ const STATUS_STYLES: Record<DisplayStatus, StatusMeta> = {
     border: "#d1d5db",
     dot: "linear-gradient(90deg, #6b7280 0%, #e5e7eb 100%)",
   },
+  site_resume_email: { label: "Go to site — Send resume on email", color: "#0f766e", bg: "#f0fdfa", border: "#99f6e4" },
   resume_sent: { label: "Resume sent (hold)", color: "#ca8a04", bg: "#fefce8", border: "#fde68a" },
   success: { label: "Success — interview scheduled", color: "#16a34a", bg: "#f0fdf4", border: "#bbf7d0" },
   selected: { label: "Selected", color: "#2563eb", bg: "#eff6ff", border: "#bfdbfe" },
@@ -81,6 +83,7 @@ const STATUS_REASON: Record<DisplayStatus, string> = {
   call_busy: "Amber — line busy, dobara try karo",
   call_later: "Cyan — bola baad mein call karo",
   switched_off: "Grey + white mix — phone switched off",
+  site_resume_email: "Teal — site pe jaake company email pe resume bhejo",
   resume_sent: "Yellow — resume bheja, hold pe",
   success: "Green — interview scheduled",
   selected: "Blue — selected",
@@ -88,11 +91,11 @@ const STATUS_REASON: Record<DisplayStatus, string> = {
 };
 
 const OUTCOME_VALUES: BruteForceCallOutcome[] = [
-  "not_called", "no_response", "wrong_number", "incoming_not_allowed", "no_vacancies", "not_connected", "call_busy", "call_later", "switched_off", "resume_sent", "success",
+  "not_called", "no_response", "wrong_number", "incoming_not_allowed", "no_vacancies", "not_connected", "call_busy", "call_later", "switched_off", "site_resume_email", "resume_sent", "success",
 ];
 const OUTCOMES = OUTCOME_VALUES.map(value => ({ value, ...STATUS_STYLES[value] }));
 const STATUS_LEGEND: DisplayStatus[] = [
-  "not_called", "no_response", "wrong_number", "incoming_not_allowed", "no_vacancies", "not_connected", "call_busy", "call_later", "switched_off", "resume_sent", "success", "selected", "rejected",
+  "not_called", "no_response", "wrong_number", "incoming_not_allowed", "no_vacancies", "not_connected", "call_busy", "call_later", "switched_off", "site_resume_email", "resume_sent", "success", "selected", "rejected",
 ];
 
 function displayStatusOf(lead: BruteForceJob): DisplayStatus {
@@ -222,6 +225,8 @@ interface LeadCardProps {
   onToggleSelected: (leadId: string) => void;
   onDelete: (lead: BruteForceJob) => void;
   onEdit: (lead: BruteForceJob) => void;
+  onAddToToday?: (lead: BruteForceJob) => void;
+  alreadyRetriedToday?: boolean;
 }
 
 function LeadCard(props: LeadCardProps) {
@@ -298,6 +303,17 @@ function LeadCard(props: LeadCardProps) {
             onClick={() => props.onDelete(lead)}
           >
             Delete
+          </button>
+        )}
+        {props.onAddToToday && (
+          <button
+            type="button"
+            className="btn btn-primary btn-sm"
+            disabled={busy || props.alreadyRetriedToday}
+            title={props.alreadyRetriedToday ? "Aaj ke liye pehle se add ho chuka hai" : "Aaj ki date pe dubara try karo"}
+            onClick={() => props.onAddToToday!(lead)}
+          >
+            {props.alreadyRetriedToday ? "Already on today" : "Add to today"}
           </button>
         )}
       </div>
@@ -427,6 +443,23 @@ function LeadCard(props: LeadCardProps) {
           </div>
         </div>
       )}
+
+      {lead.previousTryDate && lead.tryNumber && lead.tryNumber >= 2 && (
+        <div style={{
+          marginTop: 16,
+          paddingTop: 12,
+          borderTop: `1px solid ${status.border}`,
+          fontSize: 11,
+          lineHeight: 1.5,
+        }}>
+          <div style={{ fontWeight: 800, color: status.color, letterSpacing: "0.02em" }}>
+            {ordinalTryLabel(lead.tryNumber)} — {routeDateLabel(leadCreatedDateKey(lead))}
+          </div>
+          <div style={{ color: "var(--mute)", marginTop: 4, fontWeight: 600 }}>
+            previous try — {routeDateLabel(lead.previousTryDate)}
+          </div>
+        </div>
+      )}
     </article>
   );
 }
@@ -477,6 +510,19 @@ function routeDateLabel(key: string): string {
   return date.toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short" });
 }
 
+function ordinalTryLabel(n: number): string {
+  if (n === 2) return "2nd Try";
+  if (n === 3) return "3rd Try";
+  if (n % 10 === 1 && n % 100 !== 11) return `${n}st Try`;
+  if (n % 10 === 2 && n % 100 !== 12) return `${n}nd Try`;
+  if (n % 10 === 3 && n % 100 !== 13) return `${n}rd Try`;
+  return `${n}th Try`;
+}
+
+function leadCreatedDateKey(lead: BruteForceJob): string {
+  return dateKeyFromDate(new Date(toMillis(lead.createdAt) || Date.now()));
+}
+
 export default function BruteForceJobsView() {
   const auth = useStore($auth);
   const [leads, setLeads] = useState<BruteForceJob[]>([]);
@@ -504,6 +550,7 @@ export default function BruteForceJobsView() {
   const [selectedRouteDate, setSelectedRouteDate] = useState<string>(() => dateKeyFromDate(new Date()));
   const [leadSearch, setLeadSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<DisplayStatus | null>(null);
+  const [retryBusy, setRetryBusy] = useState(false);
   const [now, setNow] = useState(Date.now());
   const todayChipRef = useRef<HTMLButtonElement | null>(null);
   const didScrollToday = useRef(false);
@@ -610,6 +657,60 @@ export default function BruteForceJobsView() {
   const pagedLeads = visibleSection.items.slice(0, leadLimit);
   const visibleLeadIds = shownItems.map(lead => lead.id);
   const allVisibleSelected = visibleLeadIds.length > 0 && visibleLeadIds.every(id => selectedLeadIds.has(id));
+  const todayDateKey = dateKeyFromDate(new Date());
+  const retriedTodaySourceIds = useMemo(() => new Set(
+    leads
+      .filter(lead => leadCreatedDateKey(lead) === todayDateKey && lead.retryFromLeadId)
+      .map(lead => lead.retryFromLeadId as string)
+  ), [leads, todayDateKey]);
+  const canOfferRetry = !!statusFilter && selectedRouteDate !== todayDateKey && shownItems.length > 0;
+  const retryableVisibleCount = shownItems.filter(lead => !retriedTodaySourceIds.has(lead.id)).length;
+  const retryableSelectedCount = [...selectedLeadIds].filter(id => {
+    const lead = leads.find(item => item.id === id);
+    return lead && !retriedTodaySourceIds.has(lead.id) && shownItems.some(item => item.id === id);
+  }).length;
+
+  async function addLeadsToToday(sourceLeads: BruteForceJob[]) {
+    if (!auth.user || !auth.profile) {
+      showToast("Not logged in.", "error");
+      return;
+    }
+    const unique = sourceLeads.filter(lead => !retriedTodaySourceIds.has(lead.id));
+    if (unique.length === 0) {
+      showToast("Ye leads aaj ke liye pehle se add ho chuki hain.", "error");
+      return;
+    }
+    setRetryBusy(true);
+    try {
+      const count = await createBruteForceRetryLeads(
+        auth.user.uid,
+        auth.profile.username,
+        unique,
+        selectedRouteDate
+      );
+      setSelectedRouteDate(todayDateKey);
+      setStatusFilter(null);
+      setSelectedLeadIds(new Set());
+      showToast(`${count} lead${count === 1 ? "" : "s"} aaj ki date pe add — dubara try karo.`, "info");
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : "Retry add fail ho gaya.", "error");
+    } finally {
+      setRetryBusy(false);
+    }
+  }
+
+  function handleAddVisibleToToday() {
+    void addLeadsToToday(shownItems);
+  }
+
+  function handleAddSelectedToToday() {
+    const selected = shownItems.filter(lead => selectedLeadIds.has(lead.id));
+    void addLeadsToToday(selected);
+  }
+
+  function handleAddSingleToToday(lead: BruteForceJob) {
+    void addLeadsToToday([lead]);
+  }
 
   function toggleLeadSelection(leadId: string) {
     setSelectedLeadIds(current => {
@@ -1120,6 +1221,34 @@ export default function BruteForceJobsView() {
             );
           })}
         </div>
+        {canOfferRetry && (
+          <div style={{
+            marginTop: 14,
+            padding: "12px 14px",
+            borderRadius: 8,
+            border: "1px solid var(--hairline-strong)",
+            background: "var(--surface-soft)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 12,
+            flexWrap: "wrap",
+          }}>
+            <div style={{ fontSize: 12, color: "var(--body)", lineHeight: 1.55, maxWidth: 520 }}>
+              <strong style={{ color: "var(--ink)" }}>{STATUS_STYLES[statusFilter!].label}</strong>
+              {" "}— {shownItems.length} lead{shownItems.length === 1 ? "" : "s"} ({routeDateLabel(selectedRouteDate)}).
+              Inhe aaj ki date pe add karo taaki dubara try kar sako.
+            </div>
+            <button
+              type="button"
+              className="btn btn-primary btn-sm"
+              disabled={retryBusy || retryableVisibleCount === 0}
+              onClick={handleAddVisibleToToday}
+            >
+              {retryBusy ? "Adding…" : `Add all to today (${retryableVisibleCount})`}
+            </button>
+          </div>
+        )}
       </div>
 
       {!statusFilter && (
@@ -1378,6 +1507,16 @@ export default function BruteForceJobsView() {
                   <button type="button" className="btn btn-ghost btn-sm" disabled={bulkDeleting} onClick={() => setSelectedLeadIds(new Set())}>
                     Clear
                   </button>
+                  {canOfferRetry && (
+                    <button
+                      type="button"
+                      className="btn btn-primary btn-sm"
+                      disabled={retryBusy || retryableSelectedCount === 0}
+                      onClick={handleAddSelectedToToday}
+                    >
+                      Add selected to today ({retryableSelectedCount})
+                    </button>
+                  )}
                   <button type="button" className="btn btn-danger btn-sm" disabled={bulkDeleting} onClick={openBulkDelete}>
                     Delete selected ({selectedLeadIds.size})
                   </button>
@@ -1418,6 +1557,8 @@ export default function BruteForceJobsView() {
                   onToggleSelected={toggleLeadSelection}
                   onDelete={leadToDelete => { setDeleteError(""); setDeleteTarget(leadToDelete); }}
                   onEdit={leadToEdit => { setEditError(""); setEditUnlocked(false); setEditAnswer(""); setEditTarget(leadToEdit); }}
+                  onAddToToday={canOfferRetry ? handleAddSingleToToday : undefined}
+                  alreadyRetriedToday={retriedTodaySourceIds.has(lead.id)}
                 />
               );
             })}

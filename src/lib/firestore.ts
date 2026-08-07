@@ -98,6 +98,12 @@ export interface BruteForceJob {
   interviewAt: any | null;
   interviewRescheduledAt: any | null;
   statusHistory?: BruteForceStatusEntry[];
+  /** YYYY-MM-DD — jis din pehle try hua tha (retry cards pe). */
+  previousTryDate?: string;
+  /** 2 = 2nd try, 3 = 3rd try, … */
+  tryNumber?: number;
+  /** Source lead id jisse retry banaya. */
+  retryFromLeadId?: string;
   createdAt: any;
   updatedAt: any;
 }
@@ -117,6 +123,7 @@ export type BruteForceCallOutcome =
   | "call_busy"
   | "call_later"
   | "switched_off"
+  | "site_resume_email"
   | "resume_sent"
   | "success";
 
@@ -346,6 +353,51 @@ export async function createBruteForceJobs(
   });
   await batch.commit();
   return rows.length;
+}
+
+/** Copy leads to today as fresh “not called” retries; keeps previousTryDate + tryNumber. */
+export async function createBruteForceRetryLeads(
+  ownerUID: string,
+  ownerUsername: string,
+  sources: BruteForceJob[],
+  previousTryDate: string
+): Promise<number> {
+  if (sources.length === 0) return 0;
+  if (sources.length > 100) {
+    throw new Error("Maximum 100 leads can be retried at once.");
+  }
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(previousTryDate)) {
+    throw new Error("Invalid previous try date.");
+  }
+
+  const batch = writeBatch(db);
+  sources.forEach(source => {
+    const tryNumber = Math.min(99, (source.tryNumber ?? 1) + 1);
+    const ref = doc(collection(db, "bruteForceJobs"));
+    batch.set(ref, {
+      ownerUID,
+      ownerUsername,
+      company: source.company,
+      phone: source.phone ?? "",
+      location: source.location,
+      mapLink: source.mapLink,
+      role: source.role,
+      callOutcome: "not_called",
+      decision: "pending",
+      successAt: null,
+      interviewMode: null,
+      interviewAt: null,
+      interviewRescheduledAt: null,
+      statusHistory: [{ status: "not_called", at: Date.now() }],
+      previousTryDate,
+      tryNumber,
+      retryFromLeadId: source.id,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    });
+  });
+  await batch.commit();
+  return sources.length;
 }
 
 export function bruteForceRouteJobId(ownerUID: string, leadId: string): string {

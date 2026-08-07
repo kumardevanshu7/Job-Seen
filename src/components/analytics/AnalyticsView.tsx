@@ -22,7 +22,7 @@ type Row = {
 };
 
 const RANK: Record<string, number> = {
-  "Selected": 0, "Resume sent (hold)": 1, "Interview scheduled": 2,
+  "Selected": 0, "Resume sent (hold)": 1, "Go to site — Send resume on email": 1.4, "Interview scheduled": 2,
   "Applied": 3, "Selected!": 3, "Call picked but no vacancies there": 4,
   "Incoming not allowed": 5, "Wrong number": 6, "Not Connected - Try Again": 6.5,
   "Call Busy - Try Again": 6.6, "Wait - Call me later": 6.7, "Ringing but no response": 7,
@@ -50,6 +50,7 @@ const BRUTE_META: Record<string, { label: string; color: string; bg: string; bor
   call_busy:            { label: "Call Busy - Try Again", color: "#d97706", bg: "#fffbeb", border: "#fcd34d" },
   call_later:           { label: "Wait - Call me later",  color: "#0891b2", bg: "#ecfeff", border: "#a5f3fc" },
   switched_off:         { label: "Switched off",         color: "#475569", bg: "linear-gradient(90deg,#e5e7eb,#ffffff,#f3f4f6)", border: "#d1d5db" },
+  site_resume_email:    { label: "Go to site — Send resume on email", color: "#0f766e", bg: "#f0fdfa", border: "#99f6e4" },
   resume_sent:          { label: "Resume sent (hold)",   color: "#ca8a04", bg: "#fefce8", border: "#fde68a" },
   success:              { label: "Interview scheduled",  color: "#16a34a", bg: "#f0fdf4", border: "#bbf7d0" },
   selected:             { label: "Selected",             color: "#2563eb", bg: "#eff6ff", border: "#bfdbfe" },
