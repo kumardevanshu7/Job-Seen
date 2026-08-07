@@ -187,7 +187,12 @@ export default function LoginView() {
         ))}
       </section>
 
-      <footer className="landing-footer">[EOF] © {new Date().getFullYear()} JobSeen · Arigato Labs</footer>
+      <footer className="landing-footer">
+        [EOF] © {new Date().getFullYear()} JobSeen · Arigato Labs
+        <span style={{ display: "block", marginTop: 8, opacity: 0.75, fontSize: 11 }}>
+          After sign-in: About · Privacy · Terms · Disclaimer · Contact
+        </span>
+      </footer>
     </div>
   );
 }

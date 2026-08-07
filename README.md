@@ -67,6 +67,8 @@ PUBLIC_FIREBASE_PROJECT_ID=your_project_id
 PUBLIC_FIREBASE_STORAGE_BUCKET=your_project.firebasestorage.app
 PUBLIC_FIREBASE_MESSAGING_SENDER_ID=your_sender_id
 PUBLIC_FIREBASE_APP_ID=your_app_id
+# Contact form → kumardevanshu3001@gmail.com (https://web3forms.com)
+PUBLIC_WEB3FORMS_KEY=your_access_key_here
 ```
 
 ### Step 6: Start the Server!
@@ -85,6 +87,12 @@ This project is fully optimized for **Vercel** deployments.
 3. Import your GitHub repository.
 4. Expand **Environment Variables** and paste in all the variables from your local `.env` file.
 5. Click **Deploy**. Vercel will automatically detect the Astro framework and build the project perfectly.
+6. After deploy: Firebase Console → **Authentication** → **Settings** → **Authorized domains** → add your Vercel domain.
+7. Set `PUBLIC_WEB3FORMS_KEY` in Vercel so `/contact` can email the founder.
+
+## Legal & brand
+
+JobSeen includes Arigato Labs pages: `/explore`, `/about`, `/privacy`, `/terms`, `/disclaimer`, `/contact`.
 
 ---
 *Created as part of Arigato Labs.*

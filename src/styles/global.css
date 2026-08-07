@@ -45,6 +45,11 @@ body {
   min-height: 100vh;
 }
 
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
 ::-webkit-scrollbar { width: 4px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--hairline-strong); border-radius: 2px; }
@@ -1008,4 +1013,156 @@ body {
   .shrink-hide {
     display: none !important;
   }
+}
+
+/* ─── Arigato Labs legal / about pages ───────────────────────────────────── */
+.legal-doc {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 48px 20px 80px;
+  animation: fadeUp 0.45s ease forwards;
+}
+
+.legal-doc-title {
+  font-size: 32px;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  color: var(--ink);
+  margin: 0 0 12px;
+  line-height: 1.15;
+}
+
+.legal-doc-lead {
+  font-size: 15px;
+  color: var(--mute);
+  margin: 0 0 36px;
+  line-height: 1.6;
+}
+
+.legal-doc h2 {
+  font-size: 13px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ink);
+  margin: 32px 0 10px;
+}
+
+.legal-doc p,
+.legal-doc li {
+  font-size: 14px;
+  line-height: 1.75;
+  color: var(--body);
+}
+
+.legal-doc p { margin: 0 0 12px; }
+
+.legal-doc ul {
+  margin: 0 0 12px;
+  padding-left: 1.2em;
+}
+
+.legal-doc li { margin-bottom: 6px; }
+
+.legal-doc a {
+  color: var(--ink);
+  text-underline-offset: 2px;
+}
+
+.legal-doc-meta {
+  font-size: 12px;
+  color: var(--ash);
+  margin: 0 0 28px;
+}
+
+.legal-doc-footer {
+  margin-top: 48px;
+  padding-top: 28px;
+  border-top: 1px solid var(--hairline);
+  text-align: center;
+}
+
+.legal-doc-footer p {
+  font-size: 12px;
+  color: var(--mute);
+  margin: 0 0 8px;
+}
+
+.arigato-legal-links {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 4px 0;
+  font-size: 12px;
+  margin-bottom: 12px;
+}
+
+.arigato-legal-links a {
+  color: var(--ink);
+  text-decoration: none;
+  padding: 2px 6px;
+}
+
+.arigato-legal-links a:hover {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.arigato-legal-sep {
+  color: var(--ash);
+  padding: 0 2px;
+  user-select: none;
+}
+
+.legal-contact-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-width: 520px;
+}
+
+.legal-contact-form .form-label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink);
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.legal-contact-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  margin-top: 4px;
+}
+
+.legal-contact-error {
+  font-size: 13px;
+  color: var(--danger);
+  margin: 0;
+  line-height: 1.5;
+}
+
+.legal-contact-ok {
+  padding: 20px 0;
+}
+
+.legal-contact-ok p {
+  font-size: 15px;
+  color: var(--ink);
+  margin: 0 0 16px;
+}
+
+.legal-contact-email {
+  font-size: 13px;
+  color: var(--mute);
+  margin: 0 0 28px;
+}
+
+.legal-contact-email a {
+  color: var(--ink);
 }

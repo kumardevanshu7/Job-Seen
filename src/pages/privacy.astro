@@ -1,0 +1,78 @@
+---
+import AppLayout from "../layouts/AppLayout.astro";
+import ArigatoLegalLinks from "../components/legal/ArigatoLegalLinks";
+---
+<AppLayout title="Privacy">
+  <article class="legal-doc">
+    <h1 class="legal-doc-title">Privacy Policy</h1>
+    <p class="legal-doc-meta">Last updated: 2026 · JobSeen by Arigato Labs</p>
+    <p class="legal-doc-lead">
+      Plain-language summary of how JobSeen handles your information.
+    </p>
+
+    <h2>1. Who we are</h2>
+    <p>
+      <strong>JobSeen</strong> is a product of <strong>Arigato Labs</strong>, founded by Kumar Devanshu.
+      Contact: <a href="mailto:kumardevanshu3001@gmail.com">kumardevanshu3001@gmail.com</a>.
+    </p>
+
+    <h2>2. What we collect</h2>
+    <ul>
+      <li><strong>Account:</strong> Google sign-in provides email, display name, and photo URL.</li>
+      <li><strong>Profile:</strong> username and public profile fields you set in the app.</li>
+      <li><strong>App content you create:</strong> job listings, Brute Force leads, walk-in route data, connection requests, chat messages, notification records, and permission settings (e.g. canCopy).</li>
+      <li><strong>One Password:</strong> a security question you choose, plus a hashed (digest) answer — not the plain answer — used to protect sensitive edits and deletes.</li>
+      <li><strong>Technical:</strong> Firebase / hosting infrastructure may process IP and basic request metadata. We do not run a separate advertising tracker in the app.</li>
+    </ul>
+
+    <h2>3. How we use data</h2>
+    <ul>
+      <li>Provide JobSeen features (sync jobs, chat, connections, routes).</li>
+      <li>Authenticate you and keep accounts secure.</li>
+      <li>Enforce permissions (who can see or copy your listings).</li>
+      <li>Improve reliability and fix bugs.</li>
+    </ul>
+
+    <h2>4. Third parties</h2>
+    <ul>
+      <li><strong>Google / Firebase</strong> — Authentication and Cloud Firestore.</li>
+      <li><strong>Vercel</strong> — static hosting and delivery of the web app.</li>
+      <li><strong>Web3Forms</strong> (optional) — only if you submit the Contact form; message delivery to our inbox.</li>
+    </ul>
+    <p>We do not sell your personal data.</p>
+
+    <h2>5. Storage &amp; retention</h2>
+    <p>
+      Primary app data lives in Firebase (cloud) so it syncs across devices.
+      You can delete jobs, leads, and related content inside the product where those actions are offered.
+      For account-level deletion requests, contact us at the email above.
+    </p>
+
+    <h2>6. Security</h2>
+    <p>
+      We use reasonable safeguards including Firestore security rules, HTTPS links where required,
+      and One Password digests for sensitive actions. No system is perfect — please use a strong Google account
+      and treat shared devices carefully.
+    </p>
+
+    <h2>7. Children</h2>
+    <p>JobSeen is not directed at children under 13. Do not use the service if you are under 13.</p>
+
+    <h2>8. Changes</h2>
+    <p>
+      We may update this policy. Continued use after changes means you accept the updated version.
+      The “Last updated” line above will change when we revise it.
+    </p>
+
+    <h2>9. Contact</h2>
+    <p>
+      Privacy questions: <a href="mailto:kumardevanshu3001@gmail.com">kumardevanshu3001@gmail.com</a>
+      or use the <a href="/contact">Contact</a> page.
+    </p>
+
+    <footer class="legal-doc-footer">
+      <ArigatoLegalLinks client:load />
+      <p>Copyright &copy; 2026 Arigato Labs. All Rights Reserved.</p>
+    </footer>
+  </article>
+</AppLayout>

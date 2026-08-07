@@ -268,6 +268,21 @@ export default function SettingsView() {
       </div>
 
       <div className="settings-section">
+        <div className="settings-section-title">Arigato Labs</div>
+        <div style={{ padding: "8px 0 4px", display: "flex", flexWrap: "wrap", gap: "8px 14px", fontSize: 13 }}>
+          <a href="/about" style={{ color: "var(--ink)" }}>About</a>
+          <a href="/privacy" style={{ color: "var(--ink)" }}>Privacy</a>
+          <a href="/terms" style={{ color: "var(--ink)" }}>Terms</a>
+          <a href="/disclaimer" style={{ color: "var(--ink)" }}>Disclaimer</a>
+          <a href="/contact" style={{ color: "var(--ink)" }}>Contact</a>
+          <a href="/explore" style={{ color: "var(--ink)" }}>Explore</a>
+        </div>
+        <p className="form-hint" style={{ marginTop: 8 }}>
+          Copyright © 2026 Arigato Labs. All Rights Reserved.
+        </p>
+      </div>
+
+      <div className="settings-section">
         <div className="settings-section-title">Account</div>
         <div style={{ padding: "12px 0" }}>
           <button className="btn btn-danger" onClick={handleSignOut}>Sign out</button>

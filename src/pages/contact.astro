@@ -1,0 +1,24 @@
+---
+import AppLayout from "../layouts/AppLayout.astro";
+import ArigatoLegalLinks from "../components/legal/ArigatoLegalLinks";
+import ContactForm from "../components/legal/ContactForm";
+---
+<AppLayout title="Contact">
+  <article class="legal-doc">
+    <h1 class="legal-doc-title">Contact Arigato Labs</h1>
+    <p class="legal-doc-lead">
+      Questions about <strong>JobSeen</strong> or Arigato Labs? Send a message — it goes to the founder.
+    </p>
+    <p class="legal-contact-email">
+      Public address:
+      <a href="mailto:kumardevanshu3001@gmail.com">kumardevanshu3001@gmail.com</a>
+    </p>
+
+    <ContactForm client:load />
+
+    <footer class="legal-doc-footer">
+      <ArigatoLegalLinks client:load />
+      <p>Copyright &copy; 2026 Arigato Labs. All Rights Reserved.</p>
+    </footer>
+  </article>
+</AppLayout>

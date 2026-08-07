@@ -1,0 +1,69 @@
+---
+import AppLayout from "../layouts/AppLayout.astro";
+import ArigatoLegalLinks from "../components/legal/ArigatoLegalLinks";
+---
+<AppLayout title="Terms">
+  <article class="legal-doc">
+    <h1 class="legal-doc-title">Terms &amp; Conditions</h1>
+    <p class="legal-doc-meta">Last updated: 2026 · JobSeen by Arigato Labs</p>
+
+    <h2>1. Agreement</h2>
+    <p>
+      By using <strong>JobSeen</strong>, you agree to these Terms. If you do not agree, do not use the app.
+    </p>
+
+    <h2>2. The service</h2>
+    <p>
+      JobSeen is provided by <strong>Arigato Labs</strong> as a personal job-tracking and related collaboration tool
+      (applications, call leads, routes, connections, and messaging as offered in the product).
+    </p>
+
+    <h2>3. Accounts</h2>
+    <p>
+      You are responsible for your Google login, username, and all content you add (jobs, leads, messages, etc.).
+      Keep your account secure and do not share access with others.
+    </p>
+
+    <h2>4. Acceptable use</h2>
+    <ul>
+      <li>No abuse, harassment, or illegal content.</li>
+      <li>No scraping or automation that harms the service or other users.</li>
+      <li>No attempts to bypass security, permissions, or One Password protections.</li>
+      <li>Respect others’ listings — copy only when they grant permission.</li>
+    </ul>
+
+    <h2>5. Intellectual property</h2>
+    <p>
+      The <strong>Arigato Labs</strong> name, logos, and brand assets are owned by Arigato Labs.
+      Brand name and logos may not be reused outside Arigato Labs apps without permission.
+      JobSeen product UI and code rights are as stated in the project README; brand assets remain All Rights Reserved.
+    </p>
+
+    <h2>6. Availability</h2>
+    <p>
+      The service may change, break, or stop at any time. We do not guarantee uptime, sync speed, or that every feature will remain available.
+    </p>
+
+    <h2>7. Termination</h2>
+    <p>
+      We may suspend or restrict access for abuse or security risk. You may stop using JobSeen at any time.
+    </p>
+
+    <h2>8. Governing note</h2>
+    <p>
+      Disputes are handled under applicable law in the founder’s jurisdiction (India), unless later specified otherwise.
+    </p>
+
+    <h2>9. Contact</h2>
+    <p>
+      <a href="mailto:kumardevanshu3001@gmail.com">kumardevanshu3001@gmail.com</a>
+      · <a href="/contact">Contact form</a>
+    </p>
+
+    <footer class="legal-doc-footer">
+      <ArigatoLegalLinks client:load />
+      <p>Copyright &copy; 2026 Arigato Labs. All Rights Reserved.</p>
+      <p>Built by Kumar Devanshu.</p>
+    </footer>
+  </article>
+</AppLayout>

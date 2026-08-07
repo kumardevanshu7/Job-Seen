@@ -1,0 +1,38 @@
+---
+import AppLayout from "../layouts/AppLayout.astro";
+import ArigatoLegalLinks from "../components/legal/ArigatoLegalLinks";
+---
+<AppLayout title="About">
+  <article class="legal-doc">
+    <h1 class="legal-doc-title">About Arigato Labs</h1>
+    <p class="legal-doc-lead">
+      <strong>JobSeen</strong> is a product of <strong>Arigato Labs</strong>.
+    </p>
+
+    <p>
+      Built by <strong>Kumar Devanshu</strong>, founder of Arigato Labs (2026).
+    </p>
+
+    <h2>Mission</h2>
+    <p>
+      We build sleek, modern, high-performance tools that help people get things done with clarity and calm.
+      Software should feel fast, natural, and carefully designed.
+    </p>
+
+    <h2>This product</h2>
+    <p>
+      JobSeen helps you track job applications, cold-call leads, walk-in routes, and stay connected with peers —
+      without losing status in a spreadsheet.
+    </p>
+
+    <p>
+      Questions? <a href="/contact">Contact us</a>.
+    </p>
+
+    <footer class="legal-doc-footer">
+      <ArigatoLegalLinks client:load />
+      <p>Copyright &copy; 2026 Arigato Labs. All Rights Reserved.</p>
+      <p>Built by Kumar Devanshu. Contact: kumardevanshu3001@gmail.com</p>
+    </footer>
+  </article>
+</AppLayout>

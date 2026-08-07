@@ -1,5 +1,6 @@
 ---
 import AppLayout from "../layouts/AppLayout.astro";
+import ArigatoLegalLinks from "../components/legal/ArigatoLegalLinks";
 ---
 <AppLayout title="Explore Arigato">
   <div class="explore-container">
@@ -12,7 +13,7 @@ import AppLayout from "../layouts/AppLayout.astro";
       
       <div class="image-section">
         <img 
-          src="/dev-brand-logo.webp" 
+          src="/arigato-labs-logo.png" 
           alt="Arigato Labs Logo" 
           class="brand-image"
         />
@@ -32,19 +33,20 @@ import AppLayout from "../layouts/AppLayout.astro";
       </div>
 
       <footer class="explore-footer">
-        <h4 class="legal-title">Legal Disclaimer & License</h4>
+        <h4 class="legal-title">ARIGATO LABS</h4>
         <p class="legal-copy">
           Copyright &copy; 2026 Arigato Labs. All Rights Reserved.
         </p>
         <p class="legal-copy">
-          Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
-        </p>
-        <p class="legal-copy">
-          The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+          <strong>JobSeen</strong> is a product of Arigato Labs, founded by Kumar Devanshu.
+          Brand name and logos may not be reused outside Arigato Labs apps without permission.
         </p>
         <p class="legal-copy muted">
-          THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY.
+          Built by Kumar Devanshu. Contact: kumardevanshu3001@gmail.com
         </p>
+        <div class="explore-legal-row">
+          <ArigatoLegalLinks client:load />
+        </div>
       </footer>
 
     </div>
@@ -187,6 +189,10 @@ import AppLayout from "../layouts/AppLayout.astro";
     opacity: 0.7;
   }
 
+  .explore-legal-row {
+    margin-top: 24px;
+  }
+
   @media (max-width: 768px) {
     .explore-title { font-size: 38px; }
     .explore-subtitle { font-size: 18px; }
@@ -204,4 +210,3 @@ import AppLayout from "../layouts/AppLayout.astro";
     }
   }
 </style>
-
