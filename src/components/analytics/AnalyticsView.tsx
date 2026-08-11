@@ -51,6 +51,7 @@ const BRUTE_META: Record<string, { label: string; color: string; bg: string; bor
   call_later:           { label: "Wait - Call me later",  color: "#0891b2", bg: "#ecfeff", border: "#a5f3fc" },
   switched_off:         { label: "Switched off",         color: "#475569", bg: "linear-gradient(90deg,#e5e7eb,#ffffff,#f3f4f6)", border: "#d1d5db" },
   site_resume_email:    { label: "Go to site — Send resume on email", color: "#0f766e", bg: "#f0fdfa", border: "#99f6e4" },
+  call_cut_rudely:      { label: "They picked up but cut the call rudely", color: "#991b1b", bg: "linear-gradient(135deg,#fef2f2,#fee2e2)", border: "#fca5a5" },
   resume_sent:          { label: "Resume sent (hold)",   color: "#ca8a04", bg: "#fefce8", border: "#fde68a" },
   success:              { label: "Interview scheduled",  color: "#16a34a", bg: "#f0fdf4", border: "#bbf7d0" },
   selected:             { label: "Selected",             color: "#2563eb", bg: "#eff6ff", border: "#bfdbfe" },

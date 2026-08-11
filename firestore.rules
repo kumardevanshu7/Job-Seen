@@ -232,7 +232,7 @@ service cloud.firestore {
         && data.location is string && data.location.size() >= 1 && data.location.size() <= 300
         && data.mapLink is string && data.mapLink.matches('^https://[A-Za-z0-9].*') && !data.mapLink.matches('^https://[^/]*@.*') && data.mapLink.size() <= 2048
         && data.role is string && data.role.size() >= 1 && data.role.size() <= 200
-        && data.callOutcome in ['not_called', 'no_response', 'wrong_number', 'incoming_not_allowed', 'no_vacancies', 'not_connected', 'call_busy', 'call_later', 'switched_off', 'site_resume_email', 'resume_sent', 'success']
+        && data.callOutcome in ['not_called', 'no_response', 'wrong_number', 'incoming_not_allowed', 'no_vacancies', 'not_connected', 'call_busy', 'call_later', 'switched_off', 'site_resume_email', 'call_cut_rudely', 'resume_sent', 'success']
         && data.decision in ['pending', 'selected', 'rejected']
         && (data.successAt == null || data.successAt is timestamp)
         && (data.interviewMode == null || data.interviewMode in ['offline', 'online'])
@@ -498,14 +498,32 @@ service cloud.firestore {
       );
     }
 
+    function isFreshBruteForceCreate(data) {
+      return data.callOutcome == 'not_called'
+        && data.decision == 'pending'
+        && !('retryFromLeadId' in data);
+    }
+
+    function isBruteForceRetryCreate(data) {
+      return 'retryFromLeadId' in data
+        && 'previousTryDate' in data
+        && data.tryNumber is int
+        && data.tryNumber >= 2
+        && data.decision == 'pending'
+        && data.callOutcome != 'success'
+        && data.successAt == null
+        && data.interviewMode == null
+        && data.interviewAt == null
+        && data.interviewRescheduledAt == null;
+    }
+
     match /bruteForceJobs/{leadId} {
       allow read: if signedIn() && (resource.data.ownerUID == request.auth.uid || admin());
       allow create: if signedIn()
         && validBruteForceJob(request.resource.data)
         && request.resource.data.ownerUID == request.auth.uid
         && request.resource.data.ownerUsername == get(/databases/$(database)/documents/publicProfiles/$(request.auth.uid)).data.username
-        && request.resource.data.callOutcome == 'not_called'
-        && request.resource.data.decision == 'pending'
+        && (isFreshBruteForceCreate(request.resource.data) || isBruteForceRetryCreate(request.resource.data))
         && request.resource.data.createdAt == request.time
         && request.resource.data.updatedAt == request.time;
       allow update: if signedIn()

@@ -82,6 +82,13 @@ const STATUS_STYLES: Record<DisplayStatus, StatusMeta> = {
     border: "#5eead4",
     dot: "linear-gradient(135deg, #14b8a6 0%, #0f766e 100%)",
   },
+  call_cut_rudely: {
+    label: "They picked up but cut the call rudely",
+    color: "#991b1b",
+    bg: "linear-gradient(135deg, #fef2f2 0%, #fee2e2 55%, #fff1f2 100%)",
+    border: "#fca5a5",
+    dot: "linear-gradient(135deg, #dc2626 0%, #991b1b 100%)",
+  },
   resume_sent: { label: "Resume sent (hold)", color: "#ca8a04", bg: "#fefce8", border: "#fde68a" },
   success: { label: "Success — interview scheduled", color: "#16a34a", bg: "#f0fdf4", border: "#bbf7d0" },
   selected: { label: "Selected", color: "#2563eb", bg: "#eff6ff", border: "#bfdbfe" },
@@ -102,6 +109,7 @@ const STATUS_REASON: Record<DisplayStatus, string> = {
   call_later: "Cyan — bola baad mein call karo",
   switched_off: "Grey + white mix — phone switched off",
   site_resume_email: "Teal — site pe jaake company email pe resume bhejo",
+  call_cut_rudely: "Red — utha ke call rude tareeke se kaat di",
   resume_sent: "Yellow — resume bheja, hold pe",
   success: "Green — interview scheduled",
   selected: "Blue — selected",
@@ -109,11 +117,11 @@ const STATUS_REASON: Record<DisplayStatus, string> = {
 };
 
 const OUTCOME_VALUES: BruteForceCallOutcome[] = [
-  "not_called", "no_response", "wrong_number", "incoming_not_allowed", "no_vacancies", "not_connected", "call_busy", "call_later", "switched_off", "site_resume_email", "resume_sent", "success",
+  "not_called", "no_response", "wrong_number", "incoming_not_allowed", "no_vacancies", "not_connected", "call_busy", "call_later", "switched_off", "site_resume_email", "call_cut_rudely", "resume_sent", "success",
 ];
 const OUTCOMES = OUTCOME_VALUES.map(value => ({ value, ...STATUS_STYLES[value] }));
 const STATUS_LEGEND: DisplayStatus[] = [
-  "not_called", "no_response", "wrong_number", "incoming_not_allowed", "no_vacancies", "not_connected", "call_busy", "call_later", "switched_off", "site_resume_email", "resume_sent", "success", "selected", "rejected",
+  "not_called", "no_response", "wrong_number", "incoming_not_allowed", "no_vacancies", "not_connected", "call_busy", "call_later", "switched_off", "site_resume_email", "call_cut_rudely", "resume_sent", "success", "selected", "rejected",
 ];
 
 function displayStatusOf(lead: BruteForceJob): DisplayStatus {
@@ -248,6 +256,73 @@ interface LeadCardProps {
   alreadyRetriedToday?: boolean;
   /** Latest retry that was created from this lead (if any). */
   continuedOn?: BruteForceJob | null;
+  leadsById: Map<string, BruteForceJob>;
+}
+
+type RetryTrailEntry = { tryNum: number; dateKey: string; statusKey: DisplayStatus };
+
+function buildRetryTrail(lead: BruteForceJob, leadsById: Map<string, BruteForceJob>): RetryTrailEntry[] {
+  const entries: RetryTrailEntry[] = [];
+  let node: BruteForceJob | undefined = lead;
+  while (node?.retryFromLeadId) {
+    const source = leadsById.get(node.retryFromLeadId);
+    if (!source) break;
+    entries.unshift({
+      tryNum: source.tryNumber ?? 1,
+      dateKey: leadCreatedDateKey(source),
+      statusKey: displayStatusOf(source),
+    });
+    node = source;
+  }
+  return entries;
+}
+
+function RetryHistoryBlock(props: {
+  lead: BruteForceJob;
+  statusKey: DisplayStatus;
+  statusLabel: string;
+  statusColor: string;
+  borderColor: string;
+  leadsById: Map<string, BruteForceJob>;
+}) {
+  const { lead, statusKey, statusLabel, statusColor, borderColor, leadsById } = props;
+  if (!lead.tryNumber || lead.tryNumber < 2) return null;
+  const trail = buildRetryTrail(lead, leadsById);
+
+  return (
+    <div style={{
+      marginTop: 16,
+      paddingTop: 12,
+      borderTop: `1px solid ${borderColor}`,
+      fontSize: 11,
+      lineHeight: 1.55,
+    }}>
+      <div style={{ fontWeight: 800, color: statusColor, letterSpacing: "0.02em", marginBottom: trail.length > 0 ? 10 : 0 }}>
+        {ordinalTryLabel(lead.tryNumber)} — {routeDateLabel(leadCreatedDateKey(lead))} — {statusLabel}
+      </div>
+      {trail.length > 0 && (
+        <>
+          <div style={{ fontSize: 10, fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--mute)", marginBottom: 6 }}>
+            Previous attempts
+          </div>
+          <ul style={{ margin: 0, paddingLeft: 16, listStyle: "disc" }}>
+            {trail.map(entry => {
+              const meta = STATUS_STYLES[entry.statusKey] ?? STATUS_STYLES.not_called;
+              return (
+                <li key={`${entry.tryNum}-${entry.dateKey}-${entry.statusKey}`} style={{ marginBottom: 4, color: "var(--body)" }}>
+                  <span style={{ fontWeight: 700, color: meta.color }}>{ordinalTryLabel(entry.tryNum)}</span>
+                  {" — "}
+                  <span style={{ fontWeight: 600 }}>{routeDateLabel(entry.dateKey)}</span>
+                  {" — "}
+                  <span style={{ color: meta.color }}>{meta.label}</span>
+                </li>
+              );
+            })}
+          </ul>
+        </>
+      )}
+    </div>
+  );
 }
 
 function ContinuedElsewhereCard(props: {
@@ -258,12 +333,15 @@ function ContinuedElsewhereCard(props: {
   busy: boolean;
   onToggleSelected: (leadId: string) => void;
   onDelete: (lead: BruteForceJob) => void;
+  leadsById: Map<string, BruteForceJob>;
 }) {
   const { lead, continuedOn } = props;
   const laterKey = leadCreatedDateKey(continuedOn);
   const tryLabel = continuedOn.tryNumber && continuedOn.tryNumber >= 2
     ? ordinalTryLabel(continuedOn.tryNumber)
     : "a later try";
+  const archivedStatus = STATUS_STYLES[displayStatusOf(lead)];
+  const trail = buildRetryTrail(lead, props.leadsById);
 
   return (
     <article style={{
@@ -312,6 +390,23 @@ function ContinuedElsewhereCard(props: {
       }}>
         This card was continued on a later date ({tryLabel} — {routeDateLabel(laterKey)}). No further action needed here.
       </div>
+      <div style={{ marginTop: 10, fontSize: 11, color: "var(--body)" }}>
+        <div style={{ fontWeight: 700, color: archivedStatus.color, marginBottom: trail.length ? 6 : 0 }}>
+          Last status here — {routeDateLabel(leadCreatedDateKey(lead))}: {archivedStatus.label}
+        </div>
+        {trail.length > 0 && (
+          <ul style={{ margin: 0, paddingLeft: 16, listStyle: "disc" }}>
+            {trail.map(entry => {
+              const meta = STATUS_STYLES[entry.statusKey] ?? STATUS_STYLES.not_called;
+              return (
+                <li key={`${entry.tryNum}-${entry.dateKey}`} style={{ marginBottom: 3 }}>
+                  {ordinalTryLabel(entry.tryNum)} — {routeDateLabel(entry.dateKey)} — {meta.label}
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </div>
     </article>
   );
 }
@@ -328,6 +423,7 @@ function LeadCard(props: LeadCardProps) {
         busy={busy}
         onToggleSelected={props.onToggleSelected}
         onDelete={props.onDelete}
+        leadsById={props.leadsById}
       />
     );
   }
@@ -544,21 +640,15 @@ function LeadCard(props: LeadCardProps) {
         </div>
       )}
 
-      {lead.previousTryDate && lead.tryNumber && lead.tryNumber >= 2 && (
-        <div style={{
-          marginTop: 16,
-          paddingTop: 12,
-          borderTop: `1px solid ${status.border}`,
-          fontSize: 11,
-          lineHeight: 1.5,
-        }}>
-          <div style={{ fontWeight: 800, color: status.color, letterSpacing: "0.02em" }}>
-            {ordinalTryLabel(lead.tryNumber)} — {routeDateLabel(leadCreatedDateKey(lead))}
-          </div>
-          <div style={{ color: "var(--mute)", marginTop: 4, fontWeight: 600 }}>
-            previous try — {routeDateLabel(lead.previousTryDate)}
-          </div>
-        </div>
+      {lead.tryNumber && lead.tryNumber >= 2 && (
+        <RetryHistoryBlock
+          lead={lead}
+          statusKey={statusKey}
+          statusLabel={status.label}
+          statusColor={status.color}
+          borderColor={status.border}
+          leadsById={props.leadsById}
+        />
       )}
     </article>
   );
@@ -611,6 +701,7 @@ function routeDateLabel(key: string): string {
 }
 
 function ordinalTryLabel(n: number): string {
+  if (n === 1) return "1st Try";
   if (n === 2) return "2nd Try";
   if (n === 3) return "3rd Try";
   if (n % 10 === 1 && n % 100 !== 11) return `${n}st Try`;
@@ -695,6 +786,7 @@ export default function BruteForceJobsView() {
     () => leads.filter(lead => dateKeyFromDate(new Date(toMillis(lead.createdAt) || Date.now())) === selectedRouteDate),
     [leads, selectedRouteDate]
   );
+  const leadsById = useMemo(() => new Map(leads.map(lead => [lead.id, lead])), [leads]);
   const statusCounts = useMemo(() => {
     const counts = Object.fromEntries(STATUS_LEGEND.map(key => [key, 0])) as Record<DisplayStatus, number>;
     dayLeads.forEach(lead => {
@@ -1721,6 +1813,7 @@ export default function BruteForceJobsView() {
                   onAddToToday={canOfferRetrySelected && !continuedBySourceId.has(lead.id) ? handleAddSingleToToday : undefined}
                   alreadyRetriedToday={retriedTodaySourceIds.has(lead.id)}
                   continuedOn={continuedBySourceId.get(lead.id) ?? null}
+                  leadsById={leadsById}
                 />
               );
             })}

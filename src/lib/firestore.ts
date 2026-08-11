@@ -124,6 +124,7 @@ export type BruteForceCallOutcome =
   | "call_later"
   | "switched_off"
   | "site_resume_email"
+  | "call_cut_rudely"
   | "resume_sent"
   | "success";
 
@@ -355,7 +356,7 @@ export async function createBruteForceJobs(
   return rows.length;
 }
 
-/** Copy leads to today as fresh “not called” retries; keeps previousTryDate + tryNumber. */
+/** Copy leads to today for another try; not_called stays not_called, other statuses carry over. */
 export async function createBruteForceRetryLeads(
   ownerUID: string,
   ownerUsername: string,
@@ -373,6 +374,17 @@ export async function createBruteForceRetryLeads(
   const batch = writeBatch(db);
   sources.forEach(source => {
     const tryNumber = Math.min(99, (source.tryNumber ?? 1) + 1);
+    const sourceOutcome = source.decision !== "pending"
+      ? source.callOutcome
+      : source.callOutcome;
+    const resetToNotCalled = sourceOutcome === "not_called";
+    const carriedOutcome = resetToNotCalled ? "not_called" : sourceOutcome;
+    const carriedHistory: BruteForceStatusEntry[] = resetToNotCalled
+      ? [{ status: "not_called", at: Date.now() }]
+      : (Array.isArray(source.statusHistory) && source.statusHistory.length > 0
+        ? source.statusHistory
+        : [{ status: carriedOutcome, at: Date.now() }]);
+
     const ref = doc(collection(db, "bruteForceJobs"));
     batch.set(ref, {
       ownerUID,
@@ -382,13 +394,13 @@ export async function createBruteForceRetryLeads(
       location: source.location,
       mapLink: source.mapLink,
       role: source.role,
-      callOutcome: "not_called",
+      callOutcome: carriedOutcome,
       decision: "pending",
       successAt: null,
       interviewMode: null,
       interviewAt: null,
       interviewRescheduledAt: null,
-      statusHistory: [{ status: "not_called", at: Date.now() }],
+      statusHistory: carriedHistory,
       previousTryDate,
       tryNumber,
       retryFromLeadId: source.id,
