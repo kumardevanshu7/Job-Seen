@@ -52,6 +52,7 @@ interface QuickForm {
   platform: string;
   role: string;
   company: string;
+  postLink: string;
   employmentType: EmploymentType;
   employmentCustom: string;
   internshipMonths: string;
@@ -84,6 +85,7 @@ const QUICK_INIT: QuickForm = {
   platform: "",
   role: "",
   company: "",
+  postLink: "",
   employmentType: "full_time",
   employmentCustom: "",
   internshipMonths: "",
@@ -395,6 +397,9 @@ export default function JobForm() {
     }
 
     if (!quick.role.trim()) { showToast("Job role is required.", "error"); return; }
+    if (!quick.postLink.trim()) { showToast("Main post link is required.", "error"); return; }
+    const postLink = safeExternalUrl(quick.postLink);
+    if (!postLink) { showToast("Main post link must be a valid https:// URL.", "error"); return; }
     if (quick.employmentType === "custom" && !quick.employmentCustom.trim()) {
       showToast("Custom employment type likho.", "error");
       return;
@@ -411,7 +416,7 @@ export default function JobForm() {
         entryMode: "quick",
         company: quick.company.trim(),
         location: "",
-        applyLink: "",
+        applyLink: postLink,
         appliedVia: platform.slice(0, 80),
         appliedViaOther: "",
         ctc: "",
@@ -695,6 +700,19 @@ export default function JobForm() {
                   <div className="form-group">
                     <label className="form-label">company name *</label>
                     <input className="form-input" list="suggest-company" placeholder="Infosys, Wipro…" value={quick.company} onChange={e => setQ("company", e.target.value)} style={inputStyle} required />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">main post link *</label>
+                    <input
+                      className="form-input"
+                      type="url"
+                      placeholder="https://www.naukri.com/job-listings-…"
+                      value={quick.postLink}
+                      onChange={e => setQ("postLink", e.target.value)}
+                      style={inputStyle}
+                      required
+                    />
+                    <span className="form-hint">Job post / listing page ka https:// link.</span>
                   </div>
                   <EmploymentFields
                     value={quick.employmentType}
