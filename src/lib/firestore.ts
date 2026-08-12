@@ -33,7 +33,8 @@ export interface UserProfile {
 
 export type JobType = 'online' | 'walkin';
 
-export type EmploymentType = 'full_time' | 'part_time' | 'internship';
+export type EmploymentType = 'full_time' | 'part_time' | 'internship' | 'custom';
+export type JobEntryMode = 'standard' | 'quick';
 
 export type JobStatus =
   | 'pending'
@@ -77,9 +78,15 @@ export interface JobCard {
   onRoute?: boolean;     // optional: include online job on Walk-in Route
   routeDate?: string;    // which day's route this job belongs to (YYYY-MM-DD)
   // Role kind
-  employmentType?: EmploymentType; // full_time | part_time | internship
+  employmentType?: EmploymentType; // full_time | part_time | internship | custom
   internshipMonths?: string;       // e.g. "3"
   ppo?: string;                    // "yes" | "no" | "maybe" | ""
+  employmentCustom?: string;       // when employmentType === "custom"
+  // Quick / Instagram entry
+  entryMode?: JobEntryMode;        // standard | quick
+  siteLink?: string;               // optional site URL (Instagram quick entry)
+  contactPhone?: string;           // optional phone
+  notes?: string;                  // free-text details
 }
 
 export interface BruteForceJob {
@@ -172,15 +179,23 @@ function buildJobPayload(
   const mapLink = data.mapLink?.trim()
     ? requireSafeExternalUrl(data.mapLink, "Map link")
     : "";
+  const siteLink = data.siteLink?.trim()
+    ? requireSafeExternalUrl(data.siteLink, "Site link")
+    : "";
   const payload: any = {
     ...data,
     applyLink,
     mapLink,
+    siteLink,
     ownerUID,
     ownerUsername,
     copiedFromUID: data.copiedFromUID ?? null,
     copiedFromUsername: data.copiedFromUsername ?? null,
     appliedViaOther: data.appliedViaOther ?? "",
+    employmentCustom: data.employmentCustom ?? "",
+    contactPhone: (data.contactPhone ?? "").trim().slice(0, 30),
+    notes: (data.notes ?? "").trim().slice(0, 2000),
+    entryMode: data.entryMode ?? "standard",
     createdAt: serverTimestamp(),
   };
   Object.keys(payload).forEach(key => payload[key] === undefined && delete payload[key]);
@@ -636,26 +651,37 @@ export type JobEditableFields = {
   employmentType: EmploymentType;
   internshipMonths: string;
   ppo: string;
+  employmentCustom?: string;
+  siteLink?: string;
+  contactPhone?: string;
+  notes?: string;
+  entryMode?: JobEntryMode;
 };
 
 function jobFieldsPayload(fields: JobEditableFields) {
   const isIntern = fields.employmentType === "internship";
+  const isCustom = fields.employmentType === "custom";
   return {
     company: fields.company.trim(),
     role: fields.role.trim(),
     location: fields.location.trim(),
     ctc: fields.ctc.trim(),
-    applyLink: fields.applyLink.trim(),
+    applyLink: fields.applyLink.trim() ? requireSafeExternalUrl(fields.applyLink, "Apply link") : "",
     appliedVia: fields.appliedVia,
     appliedViaOther: fields.appliedVia === "Others" ? fields.appliedViaOther.trim() : "",
     batch: fields.batch,
     bond: fields.bond.trim(),
     lastDate: fields.lastDate,
-    mapLink: fields.mapLink.trim(),
+    mapLink: fields.mapLink.trim() ? requireSafeExternalUrl(fields.mapLink, "Map link") : "",
     nearestMetro: fields.nearestMetro.trim(),
     employmentType: fields.employmentType,
     internshipMonths: isIntern ? fields.internshipMonths.trim() : "",
     ppo: isIntern ? fields.ppo : "",
+    employmentCustom: isCustom ? (fields.employmentCustom ?? "").trim().slice(0, 80) : "",
+    siteLink: fields.siteLink?.trim() ? requireSafeExternalUrl(fields.siteLink, "Site link") : "",
+    contactPhone: (fields.contactPhone ?? "").trim().slice(0, 30),
+    notes: (fields.notes ?? "").trim().slice(0, 2000),
+    entryMode: fields.entryMode ?? "standard",
   };
 }
 

@@ -108,9 +108,31 @@ export function buildDailyJobReportHtml(
   const total = jobs.length + bruteLeads.length;
   const rows = jobs.map((job, index) => {
     const meta = STATUS_META[(job.status ?? "pending") as JobStatus] ?? STATUS_META.pending;
+    const source = job.appliedVia === "Others"
+      ? (job.appliedViaOther || "Others")
+      : (job.appliedVia || "—");
+    const isIg = source.toLowerCase() === "instagram";
+    const emp =
+      job.employmentType === "custom" ? (job.employmentCustom || "Custom")
+      : job.employmentType === "full_time" ? "Full-time"
+      : job.employmentType === "part_time" ? "Part-time"
+      : job.employmentType === "internship" ? "Internship"
+      : "";
+    const detailBits = [
+      isIg ? `<span class="ig">Instagram</span>` : (source !== "—" ? `via ${esc(source)}` : ""),
+      job.entryMode === "quick" && !isIg ? "Quick Entry" : "",
+      emp ? esc(emp) : "",
+      job.contactPhone ? `☎ ${esc(job.contactPhone)}` : "",
+      job.notes ? esc(job.notes.length > 80 ? `${job.notes.slice(0, 80)}…` : job.notes) : "",
+    ].filter(Boolean).join(" · ");
+    const links = [
+      isIg && job.applyLink ? `<a href="${esc(job.applyLink)}" target="_blank" rel="noopener noreferrer">Reel</a>` : "",
+      job.siteLink ? `<a href="${esc(job.siteLink)}" target="_blank" rel="noopener noreferrer">Site</a>` : "",
+      !isIg && job.applyLink ? `<a href="${esc(job.applyLink)}" target="_blank" rel="noopener noreferrer">Apply</a>` : "",
+    ].filter(Boolean).join(" · ");
     return `<tr>
       <td class="num" data-label="#">${index + 1}</td>
-      <td data-label="Company"><span class="company">${esc(job.company || "—")}</span><span class="role">${esc(job.role || "")}</span></td>
+      <td data-label="Company"><span class="company">${esc(job.company || "—")}</span><span class="role">${esc(job.role || "")}</span>${detailBits ? `<span class="role">${detailBits}</span>` : ""}${links ? `<span class="role">${links}</span>` : ""}</td>
       <td data-label="Location">${esc(job.location || "—")}</td>
       <td data-label="Activity"><span class="act">Status changed</span></td>
       <td data-label="Status"><span class="badge" style="color:${meta.color};background:${meta.bg};border-color:${meta.border}">${esc(meta.label)}</span></td>
@@ -166,6 +188,7 @@ export function buildDailyJobReportHtml(
   .sec{padding:16px 24px 8px;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:#7c3aed;}
   .company{display:block;font-weight:700;font-size:13px;}
   .role{display:block;color:#6e6e73;font-size:11px;margin-top:2px;}
+  .ig{display:inline-block;color:#be123c;font-weight:800;background:#fff1f2;border:1px solid #fecdd3;border-radius:4px;padding:1px 6px;}
   .act{font-size:11px;color:#6e6e73;}
   .badge{display:inline-block;padding:3px 9px;border-radius:999px;border:1px solid;font-size:11px;font-weight:700;}
   .copyb{font-family:inherit;font-size:10px;font-weight:700;cursor:pointer;padding:2px 8px;margin-left:6px;border-radius:6px;border:1px solid #cbd5e1;background:#f8fafc;color:#334155;}

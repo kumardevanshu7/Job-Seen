@@ -173,7 +173,8 @@ service cloud.firestore {
           'applyLink', 'appliedVia', 'appliedViaOther', 'batch', 'bond', 'lastDate',
           'copiedFromUID', 'copiedFromUsername', 'createdAt', 'status', 'appliedAt',
           'statusUpdatedAt', 'reminderDismissedAt', 'cancelReason', 'jobType', 'mapLink', 'nearestMetro',
-          'routeOrder', 'onRoute', 'routeDate', 'employmentType', 'internshipMonths', 'ppo'
+          'routeOrder', 'onRoute', 'routeDate', 'employmentType', 'internshipMonths', 'ppo',
+          'employmentCustom', 'entryMode', 'siteLink', 'contactPhone', 'notes'
         ])
         && data.ownerUID is string
         && validUsername(data.ownerUsername)
@@ -183,6 +184,7 @@ service cloud.firestore {
         && (!('ctc' in data) || (data.ctc is string && data.ctc.size() <= 100))
         && (!('applyLink' in data) || httpsOrEmpty(data.applyLink))
         && (!('mapLink' in data) || httpsOrEmpty(data.mapLink))
+        && (!('siteLink' in data) || httpsOrEmpty(data.siteLink))
         && (!('appliedVia' in data) || (data.appliedVia is string && data.appliedVia.size() <= 80))
         && (!('appliedViaOther' in data) || (data.appliedViaOther is string && data.appliedViaOther.size() <= 80))
         && (!('batch' in data) || validBatchList(data.batch))
@@ -190,12 +192,17 @@ service cloud.firestore {
         && (!('cancelReason' in data) || (data.cancelReason is string && data.cancelReason.size() <= 500))
         && (!('nearestMetro' in data) || (data.nearestMetro is string && data.nearestMetro.size() <= 200))
         && (!('internshipMonths' in data) || (data.internshipMonths is string && data.internshipMonths.size() <= 20))
+        && (!('employmentCustom' in data) || (data.employmentCustom is string && data.employmentCustom.size() <= 80))
+        && (!('contactPhone' in data) || (data.contactPhone is string && data.contactPhone.size() <= 30))
+        && (!('notes' in data) || (data.notes is string && data.notes.size() <= 2000))
         && (!('routeOrder' in data) || data.routeOrder is number)
         && (!('onRoute' in data) || data.onRoute is bool)
         && (!('routeDate' in data) || (data.routeDate is string && data.routeDate.size() <= 10))
         && (!('jobType' in data) || data.jobType in ['online', 'walkin'])
-        && (!('employmentType' in data) || data.employmentType in ['full_time', 'part_time', 'internship'])
+        && (!('entryMode' in data) || data.entryMode in ['standard', 'quick'])
+        && (!('employmentType' in data) || data.employmentType in ['full_time', 'part_time', 'internship', 'custom'])
         && (!('ppo' in data) || data.ppo in ['', 'yes', 'no', 'maybe'])
+        && (data.employmentType != 'custom' || (('employmentCustom' in data) && data.employmentCustom.size() >= 1))
         && (!('status' in data) || data.status in [
           'pending', 'applied', 'in_progress', 'no_response', 'rejected',
           'selected', 'interview_done', 'fraud', 'cancelled'

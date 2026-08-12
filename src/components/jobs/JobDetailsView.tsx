@@ -59,10 +59,11 @@ function formatDay(d: any): string {
   return date.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
 }
 
-function employmentLabel(t?: string) {
-  if (t === "full_time") return "Full-time job";
-  if (t === "part_time") return "Part-time";
-  if (t === "internship") return "Internship";
+function employmentLabel(job: { employmentType?: string; employmentCustom?: string }) {
+  if (job.employmentType === "full_time") return "Full-time job";
+  if (job.employmentType === "part_time") return "Part-time";
+  if (job.employmentType === "internship") return "Internship";
+  if (job.employmentType === "custom") return job.employmentCustom?.trim() || "Custom";
   return "—";
 }
 
@@ -204,16 +205,21 @@ function buildShareHtml(job: JobCardType): string {
     <div class="card">
       <div class="role">${esc(role)}</div>
       <div class="grid">
-        ${rowHtml("Role type", employmentLabel(job.employmentType))}
+        ${rowHtml("Role type", employmentLabel(job))}
         ${rowHtml("Location", job.location || "—")}
         ${rowHtml("CTC / Stipend", job.ctc || "—")}
         ${rowHtml("Source", source)}
+        ${job.entryMode === "quick" ? rowHtml("Entry", "Quick Entry") : ""}
+        ${source.toLowerCase() === "instagram" && job.applyLink ? rowHtml("Reel link", job.applyLink, job.applyLink) : ""}
+        ${job.siteLink ? rowHtml("Site link", job.siteLink, job.siteLink) : ""}
+        ${job.contactPhone ? rowHtml("Contact", job.contactPhone) : ""}
+        ${job.notes ? rowHtml("Other details", job.notes) : ""}
         ${rowHtml("Eligible batch", batch)}
         ${rowHtml("Bond", job.bond || "—")}
         ${rowHtml("Last date", formatDay(job.lastDate))}
         ${rowHtml("Shared by", `@${job.ownerUsername || "—"}`)}
         ${extra}
-        ${job.applyLink ? rowHtml("Apply link", job.applyLink, job.applyLink) : rowHtml("Apply link", "—")}
+        ${job.applyLink && source.toLowerCase() !== "instagram" ? rowHtml("Apply link", job.applyLink, job.applyLink) : (job.applyLink ? "" : rowHtml("Apply link", "—"))}
       </div>
       ${safeExternalUrl(job.applyLink) ? `<a class="cta" href="${esc(safeExternalUrl(job.applyLink)!)}" target="_blank" rel="noopener noreferrer">Open Apply Link ↗</a>` : ""}
     </div>
@@ -501,10 +507,24 @@ export default function JobDetailsView() {
         maxWidth: 820,
         marginBottom: 20,
       }}>
-        <DetailRow label="Role type" value={employmentLabel(job.employmentType)} />
+        <DetailRow label="Role type" value={employmentLabel(job)} />
         <DetailRow label="Location" value={job.location || "—"} />
         <DetailRow label="CTC / Stipend" value={job.ctc || "—"} />
-        <DetailRow label="Source" value={source} />
+        <DetailRow
+          label="Source"
+          value={
+            source.toLowerCase() === "instagram"
+              ? <span style={{ color: "#be123c", fontWeight: 800 }}>{source}</span>
+              : source
+          }
+        />
+        {job.entryMode === "quick" && <DetailRow label="Entry mode" value="Quick Entry" />}
+        {source.toLowerCase() === "instagram" && job.applyLink && (
+          <DetailRow label="Reel link" value={job.applyLink} href={job.applyLink} />
+        )}
+        {job.siteLink && <DetailRow label="Site link" value={job.siteLink} href={job.siteLink} />}
+        {job.contactPhone && <DetailRow label="Contact" value={job.contactPhone} />}
+        {job.notes && <DetailRow label="Other details" value={job.notes} />}
         <DetailRow label="Eligible batch" value={Array.isArray(job.batch) && job.batch.length ? job.batch.join(", ") : "—"} />
         <DetailRow label="Bond" value={job.bond || "—"} />
         <DetailRow label="Last date" value={formatDay(job.lastDate)} />

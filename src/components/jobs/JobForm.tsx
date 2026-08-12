@@ -1,17 +1,23 @@
 import { useEffect, useMemo, useState } from "react";
 import { useStore } from "@nanostores/react";
 import { $auth } from "../../stores/authStore";
-import { createJob, getJobsByUID, type EmploymentType, type JobType, type JobCard } from "../../lib/firestore";
+import { createJob, getJobsByUID, type EmploymentType, type JobType, type JobCard, type JobEntryMode } from "../../lib/firestore";
 import { showToast, ToastProvider } from "../ui/Toast";
 import { safeExternalUrl } from "../../lib/security";
 import { WALK_IN_ADD_JOB_ENABLED } from "../../lib/features";
 
 const ONLINE_VIA = ["Naukri.com", "LinkedIn", "Company Website", "Referral", "Others"];
 const WALKIN_VIA = ["Job hai", "Brute force", "By friend"];
+const QUICK_SEED_PLATFORMS = ["Naukri.com", "LinkedIn", "Indeed", "Internshala", "Foundit", "Company Website"];
+const INSTAGRAM_PLATFORM = "Instagram";
 const EMPLOYMENT_OPTS: { value: EmploymentType; label: string }[] = [
   { value: "full_time", label: "Full-time job" },
   { value: "part_time", label: "Part-time" },
   { value: "internship", label: "Internship" },
+];
+const EMPLOYMENT_OPTS_WITH_CUSTOM: { value: EmploymentType; label: string }[] = [
+  ...EMPLOYMENT_OPTS,
+  { value: "custom", label: "Custom…" },
 ];
 const PPO_OPTS = [
   { value: "", label: "Not sure" },
@@ -42,6 +48,21 @@ interface OnlineForm {
   ppo: string;
 }
 
+interface QuickForm {
+  platform: string;
+  role: string;
+  company: string;
+  employmentType: EmploymentType;
+  employmentCustom: string;
+  internshipMonths: string;
+  ppo: string;
+  // Instagram-only
+  reelLink: string;
+  siteLink: string;
+  contactPhone: string;
+  notes: string;
+}
+
 interface WalkinForm {
   role: string; company: string; location: string;
   mapLink: string; nearestMetro: string;
@@ -59,6 +80,20 @@ const ONLINE_INIT: OnlineForm = {
   employmentType: "full_time", internshipMonths: "", ppo: "",
 };
 
+const QUICK_INIT: QuickForm = {
+  platform: "",
+  role: "",
+  company: "",
+  employmentType: "full_time",
+  employmentCustom: "",
+  internshipMonths: "",
+  ppo: "",
+  reelLink: "",
+  siteLink: "",
+  contactPhone: "",
+  notes: "",
+};
+
 const WALKIN_INIT: WalkinForm = {
   role: "", company: "", location: "",
   mapLink: "", nearestMetro: "",
@@ -67,19 +102,28 @@ const WALKIN_INIT: WalkinForm = {
   employmentType: "full_time", internshipMonths: "", ppo: "",
 };
 
-function employmentPayload(f: { employmentType: EmploymentType; internshipMonths: string; ppo: string }) {
+function employmentPayload(f: {
+  employmentType: EmploymentType;
+  internshipMonths: string;
+  ppo: string;
+  employmentCustom?: string;
+}) {
   const isIntern = f.employmentType === "internship";
+  const isCustom = f.employmentType === "custom";
   return {
     employmentType: f.employmentType,
     internshipMonths: isIntern ? f.internshipMonths.trim() : "",
     ppo: isIntern ? f.ppo : "",
+    employmentCustom: isCustom ? (f.employmentCustom ?? "").trim() : "",
   };
 }
 
 export default function JobForm() {
   const auth = useStore($auth);
   const [jobType, setJobType] = useState<JobType | null>(WALK_IN_ADD_JOB_ENABLED ? null : "online");
+  const [entryMode, setEntryMode] = useState<JobEntryMode>("standard");
   const [online, setOnline] = useState<OnlineForm>(ONLINE_INIT);
+  const [quick, setQuick] = useState<QuickForm>(QUICK_INIT);
   const [walkin, setWalkin] = useState<WalkinForm>(WALKIN_INIT);
   const [loading, setLoading] = useState(false);
   const [done, setDone] = useState(false);
@@ -97,15 +141,27 @@ export default function JobForm() {
   const suggest = useMemo(() => {
     const uniq = (vals: (string | undefined)[]) =>
       Array.from(new Set(vals.map(v => (v ?? "").trim()).filter(Boolean))).slice(0, 50);
+    const platformFromJob = (j: JobCard) => {
+      if (j.appliedVia === "Others") return j.appliedViaOther || "";
+      return j.appliedVia || "";
+    };
     return {
       company: uniq(pastJobs.map(j => j.company)),
       role: uniq(pastJobs.map(j => j.role)),
       location: uniq(pastJobs.map(j => j.location)),
       ctc: uniq(pastJobs.map(j => j.ctc)),
+      platform: uniq([
+        ...QUICK_SEED_PLATFORMS,
+        INSTAGRAM_PLATFORM,
+        ...pastJobs.map(platformFromJob),
+      ]),
+      employmentCustom: uniq(pastJobs.map(j => j.employmentCustom)),
     };
   }, [pastJobs]);
 
+  const isInstagram = quick.platform.trim().toLowerCase() === "instagram";
   const setO = (f: keyof OnlineForm, v: string) => setOnline(p => ({ ...p, [f]: v }));
+  const setQ = (f: keyof QuickForm, v: string) => setQuick(p => ({ ...p, [f]: v }));
   const setW = (f: keyof WalkinForm, v: string) => setWalkin(p => ({ ...p, [f]: v }));
 
   const inputStyle: React.CSSProperties = {
@@ -116,19 +172,26 @@ export default function JobForm() {
     value,
     months,
     ppo,
+    customLabel,
+    allowCustom = false,
     onChange,
+    onCustomLabel,
   }: {
     value: EmploymentType;
     months: string;
     ppo: string;
+    customLabel?: string;
+    allowCustom?: boolean;
     onChange: (field: "employmentType" | "internshipMonths" | "ppo", v: string) => void;
+    onCustomLabel?: (v: string) => void;
   }) {
+    const opts = allowCustom ? EMPLOYMENT_OPTS_WITH_CUSTOM : EMPLOYMENT_OPTS;
     return (
       <>
         <div className="form-group">
-          <label className="form-label">role type *</label>
+          <label className="form-label">employment type *</label>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            {EMPLOYMENT_OPTS.map(opt => {
+            {opts.map(opt => {
               const active = value === opt.value;
               return (
                 <button
@@ -149,6 +212,39 @@ export default function JobForm() {
             })}
           </div>
         </div>
+
+        {allowCustom && value === "custom" && onCustomLabel && (
+          <div className="form-group">
+            <label className="form-label">custom type *</label>
+            <input
+              className="form-input"
+              list="suggest-employment-custom"
+              placeholder="Contract, Freelance, Apprenticeship…"
+              value={customLabel ?? ""}
+              onChange={e => onCustomLabel(e.target.value)}
+              style={inputStyle}
+              required
+            />
+            {suggest.employmentCustom.length > 0 && (
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8 }}>
+                {suggest.employmentCustom.slice(0, 8).map(opt => (
+                  <button
+                    key={opt}
+                    type="button"
+                    onClick={() => onCustomLabel(opt)}
+                    style={{
+                      fontFamily: "inherit", fontSize: 11, fontWeight: 600,
+                      padding: "4px 8px", borderRadius: 999, cursor: "pointer",
+                      border: "1px solid var(--hairline)", background: "var(--surface-soft)", color: "var(--body)",
+                    }}
+                  >
+                    {opt}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
         {value === "internship" && (
           <div
@@ -218,6 +314,7 @@ export default function JobForm() {
     try {
       await createJob(auth.user.uid, auth.profile.username, {
         jobType: "online",
+        entryMode: "standard",
         company: online.company.trim(),
         location: online.location.trim(),
         applyLink,
@@ -231,10 +328,108 @@ export default function JobForm() {
         mapLink: "",
         nearestMetro: "",
         routeOrder: 0,
+        siteLink: "",
+        contactPhone: "",
+        notes: "",
         ...employmentPayload(online),
       });
       setDone(true);
       showToast("Job added.", "success");
+      setTimeout(() => { window.location.href = "/"; }, 900);
+    } catch (err: any) {
+      showToast(err.message ?? "Failed to add.", "error");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function submitQuick(e: React.FormEvent) {
+    e.preventDefault();
+    const platform = quick.platform.trim();
+    if (!platform) { showToast("Platform name is required.", "error"); return; }
+    if (!quick.company.trim()) { showToast("Company name is required.", "error"); return; }
+    if (!auth.user || !auth.profile) { showToast("Not logged in.", "error"); return; }
+
+    const instagram = platform.toLowerCase() === "instagram";
+    if (instagram) {
+      const reel = safeExternalUrl(quick.reelLink);
+      if (!reel) { showToast("Reel link must be a valid https:// URL.", "error"); return; }
+      const site = quick.siteLink.trim() ? safeExternalUrl(quick.siteLink) : "";
+      if (quick.siteLink.trim() && !site) { showToast("Site link must be a valid https:// URL.", "error"); return; }
+      setLoading(true);
+      try {
+        await createJob(auth.user.uid, auth.profile.username, {
+          jobType: "online",
+          entryMode: "quick",
+          company: quick.company.trim(),
+          location: "",
+          applyLink: reel,
+          appliedVia: INSTAGRAM_PLATFORM,
+          appliedViaOther: "",
+          ctc: "",
+          role: "Instagram opportunity",
+          lastDate: null,
+          bond: "",
+          batch: [],
+          mapLink: "",
+          nearestMetro: "",
+          routeOrder: 0,
+          siteLink: site || "",
+          contactPhone: quick.contactPhone.trim(),
+          notes: quick.notes.trim(),
+          employmentType: "full_time",
+          internshipMonths: "",
+          ppo: "",
+          employmentCustom: "",
+          status: "pending",
+        });
+        setDone(true);
+        showToast("Instagram lead added.", "success");
+        setTimeout(() => { window.location.href = "/"; }, 900);
+      } catch (err: any) {
+        showToast(err.message ?? "Failed to add.", "error");
+      } finally {
+        setLoading(false);
+      }
+      return;
+    }
+
+    if (!quick.role.trim()) { showToast("Job role is required.", "error"); return; }
+    if (quick.employmentType === "custom" && !quick.employmentCustom.trim()) {
+      showToast("Custom employment type likho.", "error");
+      return;
+    }
+    if (quick.employmentType === "internship" && !quick.internshipMonths.trim()) {
+      showToast("Internship duration (months) daalo.", "error");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      await createJob(auth.user.uid, auth.profile.username, {
+        jobType: "online",
+        entryMode: "quick",
+        company: quick.company.trim(),
+        location: "",
+        applyLink: "",
+        appliedVia: platform.slice(0, 80),
+        appliedViaOther: "",
+        ctc: "",
+        role: quick.role.trim(),
+        lastDate: null,
+        bond: "",
+        batch: [],
+        mapLink: "",
+        nearestMetro: "",
+        routeOrder: 0,
+        siteLink: "",
+        contactPhone: "",
+        notes: "",
+        status: "pending",
+        ...employmentPayload(quick),
+      });
+      setDone(true);
+      showToast("Quick entry saved.", "success");
       setTimeout(() => { window.location.href = "/"; }, 900);
     } catch (err: any) {
       showToast(err.message ?? "Failed to add.", "error");
@@ -296,6 +491,8 @@ export default function JobForm() {
       <datalist id="suggest-role">{suggest.role.map(v => <option key={v} value={v} />)}</datalist>
       <datalist id="suggest-location">{suggest.location.map(v => <option key={v} value={v} />)}</datalist>
       <datalist id="suggest-ctc">{suggest.ctc.map(v => <option key={v} value={v} />)}</datalist>
+      <datalist id="suggest-platform">{suggest.platform.map(v => <option key={v} value={v} />)}</datalist>
+      <datalist id="suggest-employment-custom">{suggest.employmentCustom.map(v => <option key={v} value={v} />)}</datalist>
 
       <div className="page-header">
         <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 4 }}>
@@ -307,9 +504,11 @@ export default function JobForm() {
         <p className="page-subtitle">
           {jobType === null
             ? "Choose how you found this opportunity."
-            : jobType === "online"
-              ? "Track an online application."
-              : "Track a walk-in interview stop."}
+            : jobType === "walkin"
+              ? "Track a walk-in interview stop."
+              : entryMode === "quick"
+                ? "Quick entry — platform, role, company. Instagram gets its own short form."
+                : "Track an online application."}
         </p>
       </div>
 
@@ -371,6 +570,152 @@ export default function JobForm() {
             </button>
           )}
 
+          <div style={{ display: "flex", gap: 8, marginBottom: 18, flexWrap: "wrap" }}>
+            {([
+              { id: "standard" as const, label: "Full form" },
+              { id: "quick" as const, label: "Quick Entry" },
+            ]).map(opt => {
+              const active = entryMode === opt.id;
+              return (
+                <button
+                  key={opt.id}
+                  type="button"
+                  onClick={() => setEntryMode(opt.id)}
+                  style={{
+                    fontFamily: "inherit", fontSize: 12, fontWeight: 700,
+                    padding: "8px 14px", borderRadius: 6, cursor: "pointer",
+                    border: active ? "1.5px solid var(--ink)" : "1.5px solid var(--hairline)",
+                    background: active ? "var(--ink)" : "var(--canvas)",
+                    color: active ? "var(--canvas)" : "var(--body)",
+                  }}
+                >
+                  {opt.label}
+                </button>
+              );
+            })}
+          </div>
+
+          {entryMode === "quick" ? (
+            <form onSubmit={submitQuick} style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+              <div className="form-group">
+                <label className="form-label">platform name *</label>
+                <input
+                  className="form-input"
+                  list="suggest-platform"
+                  placeholder="Naukri.com, LinkedIn, Instagram…"
+                  value={quick.platform}
+                  onChange={e => setQ("platform", e.target.value)}
+                  style={inputStyle}
+                  required
+                />
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8 }}>
+                  <button
+                    type="button"
+                    onClick={() => setQ("platform", INSTAGRAM_PLATFORM)}
+                    style={{
+                      fontFamily: "inherit", fontSize: 11, fontWeight: 800,
+                      padding: "5px 10px", borderRadius: 999, cursor: "pointer",
+                      border: isInstagram ? "1.5px solid #e11d48" : "1.5px solid #fecdd3",
+                      background: isInstagram
+                        ? "linear-gradient(135deg,#fff1f2,#ffe4e6)"
+                        : "#fff1f2",
+                      color: "#be123c",
+                    }}
+                  >
+                    Instagram
+                  </button>
+                  {suggest.platform.filter(p => p.toLowerCase() !== "instagram").slice(0, 6).map(p => (
+                    <button
+                      key={p}
+                      type="button"
+                      onClick={() => setQ("platform", p)}
+                      style={{
+                        fontFamily: "inherit", fontSize: 11, fontWeight: 600,
+                        padding: "4px 8px", borderRadius: 999, cursor: "pointer",
+                        border: quick.platform === p ? "1.5px solid var(--ink)" : "1px solid var(--hairline)",
+                        background: quick.platform === p ? "var(--surface-soft)" : "var(--canvas)",
+                        color: "var(--body)",
+                      }}
+                    >
+                      {p}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {isInstagram && (
+                <div style={{
+                  display: "inline-flex", alignItems: "center", gap: 8,
+                  padding: "8px 12px", borderRadius: 8,
+                  background: "linear-gradient(135deg,#fff1f2,#ffe4e6)",
+                  border: "1px solid #fecdd3", color: "#be123c",
+                  fontSize: 12, fontWeight: 800, letterSpacing: "0.04em",
+                  width: "fit-content",
+                }}>
+                  INSTAGRAM
+                </div>
+              )}
+
+              {isInstagram ? (
+                <>
+                  <div className="form-group">
+                    <label className="form-label">company name *</label>
+                    <input className="form-input" list="suggest-company" placeholder="Company…" value={quick.company} onChange={e => setQ("company", e.target.value)} style={inputStyle} required />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">reel link *</label>
+                    <input className="form-input" type="url" placeholder="https://www.instagram.com/reel/…" value={quick.reelLink} onChange={e => setQ("reelLink", e.target.value)} style={inputStyle} required />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">site link <span style={{ color: "var(--mute)", fontWeight: 500 }}>(optional)</span></label>
+                    <input className="form-input" type="url" placeholder="https://…" value={quick.siteLink} onChange={e => setQ("siteLink", e.target.value)} style={inputStyle} />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">any contact number <span style={{ color: "var(--mute)", fontWeight: 500 }}>(optional)</span></label>
+                    <input className="form-input" placeholder="+91 …" value={quick.contactPhone} onChange={e => setQ("contactPhone", e.target.value)} style={inputStyle} />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">any other details</label>
+                    <textarea
+                      className="form-textarea"
+                      rows={4}
+                      placeholder="Notes, hiring manager, what the reel said…"
+                      value={quick.notes}
+                      onChange={e => setQ("notes", e.target.value)}
+                      style={inputStyle}
+                    />
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="form-group">
+                    <label className="form-label">job role *</label>
+                    <input className="form-input" list="suggest-role" placeholder="Frontend Developer…" value={quick.role} onChange={e => setQ("role", e.target.value)} style={inputStyle} required />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">company name *</label>
+                    <input className="form-input" list="suggest-company" placeholder="Infosys, Wipro…" value={quick.company} onChange={e => setQ("company", e.target.value)} style={inputStyle} required />
+                  </div>
+                  <EmploymentFields
+                    value={quick.employmentType}
+                    months={quick.internshipMonths}
+                    ppo={quick.ppo}
+                    customLabel={quick.employmentCustom}
+                    allowCustom
+                    onChange={(f, v) => setQ(f, v)}
+                    onCustomLabel={v => setQ("employmentCustom", v)}
+                  />
+                </>
+              )}
+
+              <div style={{ display: "flex", gap: 10, paddingTop: 4 }}>
+                <button type="submit" className="btn btn-primary" disabled={loading || done}>
+                  {loading ? <><div className="spinner spinner-dark" style={{ width: 11, height: 11 }} /> Adding…</> : done ? "Added ✓" : "Add Quick Entry"}
+                </button>
+                <a href="/" className="btn btn-secondary" style={{ textDecoration: "none" }}>Cancel</a>
+              </div>
+            </form>
+          ) : (
           <form onSubmit={submitOnline} style={{ display: "flex", flexDirection: "column", gap: 18 }}>
             <div className="form-group">
               <label className="form-label">role *</label>
@@ -501,6 +846,7 @@ export default function JobForm() {
               <a href="/" className="btn btn-secondary" style={{ textDecoration: "none" }}>Cancel</a>
             </div>
           </form>
+          )}
         </div>
       )}
 

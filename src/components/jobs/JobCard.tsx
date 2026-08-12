@@ -70,7 +70,20 @@ const platformShort: Record<string, string> = {
   "Company Website":  "website",
   "Referral":         "referral",
   "Others":           "other",
+  "Instagram":        "instagram",
 };
+
+function employmentTypeLabel(job: JobCardType): string {
+  if (job.employmentType === "full_time") return "full-time";
+  if (job.employmentType === "part_time") return "part-time";
+  if (job.employmentType === "internship") return "internship";
+  if (job.employmentType === "custom") return (job.employmentCustom || "custom").toLowerCase();
+  return "";
+}
+
+function isInstagramJob(job: JobCardType): boolean {
+  return (job.appliedVia || "").toLowerCase() === "instagram";
+}
 
 const footerBtnBase: CSSProperties = {
   display: "inline-flex",
@@ -131,6 +144,10 @@ export default function JobCard({ job, showCopy = true, isOwner = false, onDelet
   const platform = job.appliedVia === "Others"
     ? (job.appliedViaOther || "other")
     : (platformShort[job.appliedVia] ?? job.appliedVia?.toLowerCase());
+  const instagram = isInstagramJob(job);
+  const reelUrl = instagram ? safeExternalUrl(job.applyLink) : null;
+  const siteUrl = safeExternalUrl(job.siteLink || "");
+  const phoneHref = job.contactPhone ? `tel:${job.contactPhone.replace(/[^\d+]/g, "")}` : null;
 
   async function handleCopy() {
     if (!auth.user || !auth.profile) return;
@@ -407,14 +424,31 @@ export default function JobCard({ job, showCopy = true, isOwner = false, onDelet
 
       {/* ── Meta Chips ── */}
       <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "flex-start" }}>
-        <span className="shrink-hide" style={{ background: "#f5f3f3", border: "1px solid var(--hairline,#e2dede)", color: "var(--body,#423e3e)", fontSize: 11, fontWeight: 600, padding: "4px 9px", borderRadius: 4, lineHeight: 1.35 }}>
-          source: {platform}
+        <span
+          className="shrink-hide"
+          style={instagram
+            ? {
+                background: "linear-gradient(135deg,#fff1f2,#ffe4e6)",
+                border: "1px solid #fecdd3",
+                color: "#be123c",
+                fontSize: 11, fontWeight: 800, padding: "4px 9px", borderRadius: 4, lineHeight: 1.35,
+              }
+            : {
+                background: "#f5f3f3", border: "1px solid var(--hairline,#e2dede)",
+                color: "var(--body,#423e3e)", fontSize: 11, fontWeight: 600,
+                padding: "4px 9px", borderRadius: 4, lineHeight: 1.35,
+              }}
+        >
+          {instagram ? "Instagram" : `source: ${platform}`}
         </span>
+        {job.entryMode === "quick" && !instagram && (
+          <span style={{ background: "#f8fafc", border: "1px solid #e2e8f0", color: "#475569", fontSize: 11, fontWeight: 600, padding: "4px 9px", borderRadius: 4, lineHeight: 1.35 }}>
+            quick entry
+          </span>
+        )}
         {job.employmentType && (
           <span style={{ background: "#eff6ff", border: "1px solid #bfdbfe", color: "#1d4ed8", fontSize: 11, fontWeight: 600, padding: "4px 9px", borderRadius: 4, lineHeight: 1.35 }}>
-            {job.employmentType === "full_time" ? "full-time"
-              : job.employmentType === "part_time" ? "part-time"
-              : "internship"}
+            {employmentTypeLabel(job)}
           </span>
         )}
         {job.employmentType === "internship" && job.internshipMonths && (
@@ -432,6 +466,26 @@ export default function JobCard({ job, showCopy = true, isOwner = false, onDelet
             fontSize: 11, fontWeight: 600, padding: "4px 9px", borderRadius: 4, lineHeight: 1.35,
           }}>
             PPO: {job.ppo === "yes" ? "yes" : job.ppo === "no" ? "no" : job.ppo === "maybe" ? "maybe" : "not sure"}
+          </span>
+        )}
+        {reelUrl && (
+          <a href={reelUrl} target="_blank" rel="noopener noreferrer" style={{ background: "#fff1f2", border: "1px solid #fecdd3", color: "#be123c", fontSize: 11, fontWeight: 700, padding: "4px 9px", borderRadius: 4, lineHeight: 1.35, textDecoration: "none" }}>
+            Reel ↗
+          </a>
+        )}
+        {siteUrl && (
+          <a href={siteUrl} target="_blank" rel="noopener noreferrer" style={{ background: "#f0fdf4", border: "1px solid #bbf7d0", color: "#15803d", fontSize: 11, fontWeight: 700, padding: "4px 9px", borderRadius: 4, lineHeight: 1.35, textDecoration: "none" }}>
+            Site ↗
+          </a>
+        )}
+        {phoneHref && (
+          <a href={phoneHref} style={{ background: "#eff6ff", border: "1px solid #bfdbfe", color: "#1d4ed8", fontSize: 11, fontWeight: 700, padding: "4px 9px", borderRadius: 4, lineHeight: 1.35, textDecoration: "none" }}>
+            {job.contactPhone}
+          </a>
+        )}
+        {job.notes && (
+          <span style={{ background: "#fafaf9", border: "1px solid #e7e5e4", color: "#57534e", fontSize: 11, padding: "4px 9px", borderRadius: 4, lineHeight: 1.45, maxWidth: "100%" }}>
+            {job.notes.length > 120 ? `${job.notes.slice(0, 120)}…` : job.notes}
           </span>
         )}
         {job.location && (
